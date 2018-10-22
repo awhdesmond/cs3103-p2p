@@ -1,7 +1,10 @@
 import hashlib
 import datetime
+import socket
 from functools import reduce
-import constants as CONSTANTS
+
+# PEERING CONSTANTS
+M_EXPONENT = 10
 
 def tobits(s):
     result = []
@@ -22,7 +25,7 @@ def generate_peerid():
     hash_object = hashlib.sha1(currrent_time_str)
     hex_dig = hash_object.hexdigest()
 
-    bits_arr = tobits(hex_dig)[-CONSTANTS.M_EXPONENT:]
+    bits_arr = tobits(hex_dig)[-M_EXPONENT:]
     binary_exp = 0
     peer_id = 1
     for bit in bits_arr[::-1]:
@@ -30,5 +33,3 @@ def generate_peerid():
         binary_exp = binary_exp + 1 
     
     return peer_id
-
-print(generate_peerid())

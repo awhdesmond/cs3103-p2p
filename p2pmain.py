@@ -6,59 +6,37 @@
 import sys
 import os
 import socket
+import _thread
 
-import constants as CONTSTANTS
+import utils
+
+from p2pserver import P2PServer
+from p2pclient import P2PClient
+
+# CONSTANTS
+CLIENT_ROOT_PATH = "~/.p2pclient/"
 
 class P2PMain(object):
 
     def __init__(self):
-        self.peerid      = generate_peerid()
-        self.predecessor = 0
-        self.successor   = 0
+        self.peerid = utils.generate_peerid()
+        self.p2p_server = P2PServer(self.peerid)
+        self.p2p_client = P2PClient(self.peerid)
 
     def _setup(self):
         # Create base directory to store files and chunks
         if not os.path.exists(CLIENT_ROOT_PATH):
             os.makedirs(CLIENT_ROOT_PATH)
 
-    def _render_user_menu():
-        print("Group 14 P2P Client")
-        print("-------------------")
-        print("1. List available files.")
-        print("2. Search for a file.")
-        print("3. Download a file.")
-        print("4. Share a file.")
-
-    def _process_user_option(user_option):
-        user_option = int(user_option)
-
-        if user_option == 1:
-            
-        elif user_option == 2:
-            filename = input('Enter filename: ')
-        elif user_option == 3:
-            filename = input('Enter filename: ')
-        else:
-            filename = input('Enter filename: ')
-
-    def _start_client(self):
-        while 1:
-            self._render_user_menu()
-            user_option = input('Enter option: ')
-            while user_option not in ["1", "2", "3", "4"]:
-                user_option = input('Invalid option selected. Please try again: ')
-            process_user_option(user_option)
-
-
-    def _start_server(self):
-        pass
+        self.p2p_server.setup()
+        _thread.start_new_thread(self.p2p_server.run, ())
+        
+        self.p2p_client.setup()
 
     def run(self):
         self._setup()
-        self._start_server()
-        self._start_client()
-
-       
+        self.p2p_client.run()
+        
 if __name__ == "__main__":
     p2pmain = P2PMain()
     p2pmain.run()
