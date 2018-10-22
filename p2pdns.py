@@ -39,6 +39,7 @@ class P2PDns(object):
         res = op_line + "\r\n" + "\r\n"
         for line in res_data:
             res = res + line + "\r\n"
+        res = res + "\r\n"
         return res
 
     def _process_req(self, req):

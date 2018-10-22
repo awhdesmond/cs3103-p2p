@@ -1,16 +1,13 @@
-#
-# client.py
-# ---------
-# The P2P client program. 
-# The P2P client is also a P2P server (which is different from the central server)
-#
+# p2pclient.py
+# ------------
+# The P2P main program. Calls P2P server in a daemonic thread? 
+# Wraps around the P2P client
 
 import sys
 import os
 import socket
 
 import constants as CONTSTANTS
-import create_client_socket, generate_peerid from utils
 
 class P2PMain(object):
 
@@ -30,45 +27,25 @@ class P2PMain(object):
         print("1. List available files.")
         print("2. Search for a file.")
         print("3. Download a file.")
-
-    def _list_files_from_central_server():
-        socket = create_client_socket(CENTRAL_SERVER_URL, CENTRAL_SERVER_PORT)
-        socket.sendall("GET" +  GET_ALL_FILES)
-        data = socket.recv(1024)
-        print(data)
-        socket.close()
-
-
-    def _search_file_from_central_server(filename):
-        socket = create_client_socket(CENTRAL_SERVER_URL, CENTRAL_SERVER_PORT)
-        socket.sendall("GET" +  GET_FILE.replace(":filename", filename))
-        data = socket.recv(1024)
-        print(data)
-        socket.close()
-
-    def _download_file(filename):
-        # Contact DHT to get file chunks
-        # download file chunk
-        # seed file chunk?
-        pass
+        print("4. Share a file.")
 
     def _process_user_option(user_option):
         user_option = int(user_option)
 
         if user_option == 1:
-            _list_files_from_central_server()
+            
         elif user_option == 2:
             filename = input('Enter filename: ')
-            _search_file_from_central_server(filename)
+        elif user_option == 3:
+            filename = input('Enter filename: ')
         else:
             filename = input('Enter filename: ')
-            _download_file(filename)
 
     def _start_client(self):
         while 1:
             self._render_user_menu()
             user_option = input('Enter option: ')
-            while user_option not in ["1", "2", "3"]:
+            while user_option not in ["1", "2", "3", "4"]:
                 user_option = input('Invalid option selected. Please try again: ')
             process_user_option(user_option)
 

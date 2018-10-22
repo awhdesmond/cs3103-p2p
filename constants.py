@@ -1,5 +1,7 @@
 # CONSTANTS
-CLIENT_ROOT_PATH    = "~/.p2pclient/"
+CLIENT_ROOT_PATH   = "~/.p2pclient/"
+CLIENT_SOCKET_PATH = "~/.p2pclient/uds_socket"
+
 
 # CENTRAL SERVER HOST AND PORT
 CENTRAL_SERVER_URL  = "127.0.0.1" 
