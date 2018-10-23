@@ -13,17 +13,45 @@ CS3103 Project
 ## Components
 
 ### P2P DNS
-P2P DNS server serves as a introducer whenever a new peer wants to join the network. 
+P2P DNS server serves as a introducer whenever a new peer wants to join the network. The information is stored in a __sqlite3 db__.
 
 ### P2P Main
-This the the main program that the user will run. It is a wrapper for __P2P Client__ and __P2P Server__. __P2P Client__ will handle the various user interactions. __P2P Server__ will handle file uploading, file downloading and DHT queries. __P2P Client__ will communicate with __P2P Server__ using Unix Domain Sockets (UDS) while the communication between __P2P Server__ of different peer will be done using standard TCP sockets. 
+This the the main program that the user will run. It is a wrapper for __P2P Client__ and __P2P Server__. __P2P Client__ will handle the various user interactions. __P2P Server__ will handle file uploading, file downloading and DHT queries. __P2P Client__ will communicate with __P2P Server__ using __Unix Domain Sockets (UDS)__ while the communication between __P2P Server__ of different peer will be done using standard TCP sockets. 
+
 
 ## Application layer Protocols:
 The different protocols implemented provides a systematic manner for different components to communicate with each other. Furthermore, since we are using TCP Byte Stream sockets, we need a way to delimit where our messages end. Hence -- protocols.
 
 ### P2P Client - P2P DNS
+#### Requests
+General Format: `op` `[...args]\r\n`
+  
+  1. `JOIN <peer_id> <ip-addr>`
+
+#### Responses
+General Format: 
+
+`code` `message` `content-length\r\n`<br/>
+dataline...`\r\n`<br/>
+dataline...`\r\n`
+
 
 ### P2P Server - P2P Server
+#### Requests
+General Format: `op` `[...args]\r\n`
+  
+  1. `INIT_PEER_TABLE`
+  2. `LIST_ALL_FILES`
+  3. `SEARCH <filename>`
+  4. `DOWNLOAD <filename>`
+  5. `UPLOAD <filename>`
+
+#### Responses
+General Format: 
+
+`code` `message` `content-length\r\n`<br/>
+dataline...`\r\n`<br/>
+dataline...`\r\n`
 
 
 ## References
