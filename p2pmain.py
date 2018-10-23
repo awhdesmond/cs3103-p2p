@@ -14,7 +14,7 @@ from p2pserver import P2PServer
 from p2pclient import P2PClient
 
 # CONSTANTS
-CLIENT_ROOT_PATH = "~/.p2pclient/"
+CLIENT_ROOT_PATH = "./p2pvar/"
 
 class P2PMain(object):
 

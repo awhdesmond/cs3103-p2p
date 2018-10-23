@@ -8,40 +8,40 @@
 import os
 import socket
 
+from libp2puds import libp2puds
+
 # CONSTANTS
-CLIENT_UDS_PATH  = "~/.p2pclient/uds_socket"
-CLIENT_ROOT_PATH = "~/.p2pclient/"
+CLIENT_UDS_PATH  = "./p2pvar/uds_socket"
+CLIENT_ROOT_PATH = "./p2pvar/"
 
 class P2PClient(object):
 
     def __init__(self, peerid):
         self.peerid = peerid
 
-    def _construct_uds_req(self, message):
-        return b"%s\r\n" % message
-
     def setup(self):
+        print("P2P Client Setup")
+
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(CLIENT_UDS_PATH)
 
-        contact_p2pdns_msg = self._construct_uds_req("INIT_PEER_TABLE") 
-        sock.sendall(contact_p2pdns_msg)
+        init_peer_table_req = libp2puds.construct_init_req()
+        sock.sendall(init_peer_table_req.encode())
 
-        res = ""
-        content_length = None
+        data_string = ""
         while True: 
             data = sock.recv(1024)
-            res = res + "%s" % data
-            
-            if content_length is not None:
-                recv_length = len("\r\n".join(res.split("\r\n")[1:]))
-                if recv_length >= content_length:
-                    break
-
-            if "\r\n" in res:
-                content_length = int(res.split("\r\n")[0][-1])   
-        
-        print(res)
+            data_string = data_string + data.decode("utf-8")
+            try:
+                res = libp2puds.parse_string_to_res_packet(data_string)
+                print("asd")
+                print(res)
+                break
+            except ValueError as err:
+                if int(str(err)) == libp2puds.INCOMPLETE_PACKET_ERROR:
+                    continue
+                else: 
+                    exit(libp2puds.MALFORMED_PACKET_ERROR)
         sock.close()
 
     def _render_user_menu(self):
