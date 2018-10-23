@@ -33,3 +33,6 @@ def generate_peerid():
         binary_exp = binary_exp + 1 
     
     return peer_id
+
+def remove_empty_string_from_arr(arr):
+    return list(filter(lambda x: x != '', arr))
