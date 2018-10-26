@@ -39,6 +39,21 @@ def construct_res_packet(code, message, data):
 def construct_malformed_res():
     return construct_res_packet(MALFORMED_RES_CODE, MALFORMED_RES_MSG, [])
 
-def construct_unknonw_res():
+def construct_unknown_res():
     return construct_res_packet(UNKNOWN_RES_CODE, UNKNOWN_RES_MSG, [])
 
+def parse_message_to_peer_list(string):
+    if "\r\n" in string:
+        peers = string.split("\r\n")
+        header_info = peers[0]
+        peer_list = []
+        for peer_index in range(1, len(peers) - 1): # to len(peers) - 1 here because of final \r\n in list
+            peer_info = peers[peer_index].split(",")
+            index = peer_info[0]
+            peer_id = peer_info[1]
+            ip_addr = peer_info[2]
+            peer_list.append(ip_addr)
+        return peer_list
+
+    else:
+        raise ValueError(INCOMPLETE_PACKET_ERROR)

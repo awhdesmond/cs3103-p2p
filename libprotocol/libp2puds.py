@@ -93,5 +93,5 @@ def construct_res_packet(code, message, data):
 def construct_malformed_res():
     return construct_res_packet(MALFORMED_RES_CODE, MALFORMED_RES_MSG, [])
 
-def construct_unknonw_res():
+def construct_unknown_res():
     return construct_res_packet(UNKNOWN_RES_CODE, UNKNOWN_RES_MSG, [])
