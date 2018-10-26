@@ -20,19 +20,25 @@ def create_client_socket(host, port):
     s.connect(host, port)
     return s
 
-def generate_peerid():
-    currrent_time_str = str(datetime.datetime.now()).encode()
-    hash_object = hashlib.sha1(currrent_time_str)
+def consistent_hash(string):
+    hash_object = hashlib.sha1(string)
     hex_dig = hash_object.hexdigest()
 
     bits_arr = tobits(hex_dig)[-M_EXPONENT:]
     binary_exp = 0
-    peer_id = 1
+    key = 1
     for bit in bits_arr[::-1]:
         peer_id = peer_id + bit * (2 ** binary_exp)
         binary_exp = binary_exp + 1 
     
-    return peer_id
+    return key
+
+def generate_filename_hash(filename):
+    return consistent_hash(filename)
+
+def generate_peerid():
+    currrent_time_str = str(datetime.datetime.now()).encode()
+    return consistent_hash(currrent_time_str)
 
 def remove_empty_string_from_arr(arr):
     return list(filter(lambda x: x != '', arr))
