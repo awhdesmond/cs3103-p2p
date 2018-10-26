@@ -8,7 +8,7 @@
 import os
 import socket
 
-from libp2puds import libp2puds
+from libprotocol import libp2puds
 
 # CONSTANTS
 CLIENT_UDS_PATH  = "./p2pvar/uds_socket"

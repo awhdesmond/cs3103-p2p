@@ -10,7 +10,7 @@ import os
 import socket
 import sqlite3
 
-from libp2pdns import libp2pdns
+from libprotocol import libp2pdns
 
 HOST    = '127.0.0.1'  # Standard loopback interface address (localhost)
 PORT    = 7494         # Port to listen on (non-privileged ports are > 1023)
