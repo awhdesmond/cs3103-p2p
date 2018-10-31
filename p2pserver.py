@@ -7,30 +7,33 @@
 import os
 import socket
 import types
-
-import selectors
-
-from libprotocol import libp2puds, libp2pdns
 import p2pdns
+import selectors
+import utils
+from random import randrange
+from libprotocol import libp2puds, libp2pdns, libp2pproto
 
 # CONSTANTS
-CLIENT_UDS_PATH  = "./p2pvar/uds_socket"
+CLIENT_UDS_PATH = "./p2pvar/uds_socket"
 CLIENT_ROOT_PATH = "./p2pvar/"
 
-PEER_ADDR = "127.0.0.1"
+# PEER_ADDR = "127.0.0.1"
 PEER_PORT = 8818
 
 UDS_SOCKET_DISPATCH_CODE = 1
-TCP_SOCKET_DISPATCH_CODE = 2
+UDP_SOCKET_DISPATCH_CODE = 2
 
 MAX_MSG_LEN = 1024
+NODE_ID_INDEX = 0
+NODE_IP_ADDR_INDEX = 1
+
 
 class P2PServer(object):
 
-    def __init__(self, peerid):
-        self.peerid   = peerid
+    def __init__(self, peerid, ip_addr):
+        self.peerid = peerid
+        self.ip_addr = ip_addr
         self.selector = selectors.DefaultSelector()
-        self.ip_addr = socket.gethostbyname(socket.gethostname())
 
         # Make sure the socket does not already exist
         try:
@@ -44,9 +47,12 @@ class P2PServer(object):
         self.uds_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.uds_sock.bind(CLIENT_UDS_PATH)
 
-        self.peer_server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.peer_server_sock.bind((PEER_ADDR, PEER_PORT))
+        self.peer_server_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.peer_server_sock.bind((self.ip_addr, PEER_PORT))
 
+        self.successor_node = (None, None)
+        self.next_successor_node = (None, None)
+        self.predecessor_node = (None, None)
 
     def setup(self):
         print("P2P Server Setup")
@@ -54,14 +60,15 @@ class P2PServer(object):
         self.uds_sock.listen()
         self.uds_sock.setblocking(False)
 
-        self.peer_server_sock.listen()
-        self.peer_server_sock.setblocking(False)
+        # self.peer_server_sock.setblocking(False)
 
-        self.selector.register(self.uds_sock, selectors.EVENT_READ, data=(UDS_SOCKET_DISPATCH_CODE, None)) # data is used to store whatever arbitrary data you’d like along with the socket
-        self.selector.register(self.peer_server_sock, selectors.EVENT_READ, data=(TCP_SOCKET_DISPATCH_CODE, None))
+        self.selector.register(self.uds_sock, selectors.EVENT_READ, data=(UDS_SOCKET_DISPATCH_CODE,
+                                                                          None))  # data is used to store whatever arbitrary data you’d like along with the socket
+        # self.selector.register(self.peer_server_sock, selectors.EVENT_READ, data=(UDP_SOCKET_DISPATCH_CODE, None))
 
         peer_ip_address = self._retrieve_peer_ip_address()
         self._enter_p2p_network(peer_ip_address)
+
 
     def _retrieve_peer_ip_address(self):
         # TODO: handle case if DNS is not up.
@@ -71,9 +78,8 @@ class P2PServer(object):
 
         message = libp2pdns.JOIN_REQ_OP_WORD + " " + str(self.peerid) + " " + self.ip_addr + "\r\n"
         message = message.encode()
-        total_sent = 0
 
-        sent = dns_server_sock.sendall(message[total_sent:])
+        sent = dns_server_sock.sendall(message)
         if sent == 0:
             raise RuntimeError("socket connection broken")
 
@@ -88,31 +94,122 @@ class P2PServer(object):
         if not peer_ip_addr_list:
             print("First node has no peers")
         else:
-            print ("Peer IP Address List:\n", peer_ip_addr_list)
-            # TODO: figure out how to get the predecessor and successor based on peer id
-            # TODO: figure out how to notify the predecessor and successor that they should update their respective values
+            chosen_peer_ip_addr = peer_ip_addr_list[randrange(len(peer_ip_addr_list))]
+            self._send_udp_packet(chosen_peer_ip_addr, libp2pproto.GET_NEIGHBOURS_OP_WORD, [self.peerid, self.ip_addr])
             pass
 
-    def _accept_socket(self, socket, dispatch_code):
-        conn, addr = socket.accept()
-        conn.setblocking(False)
 
-        data = (dispatch_code, types.SimpleNamespace(addr=addr, req_str='', res_str=''))
-        events = selectors.EVENT_READ | selectors.EVENT_WRITE
-        self.selector.register(conn, events, data=data)
-
-
-    def _process_uds_request(self, req):
+    def _process_p2p_request(self, req):
         op_word, arguments = req["op"], req["args"]
-        if op_word == libp2puds.INIT_PEER_TABLE_OP_WORD:
-            pass
+        if op_word == libp2pproto.GET_NEIGHBOURS_OP_WORD:
+            self._handle_get_neighbours(arguments)
+
+        elif op_word == libp2pproto.RET_NEIGHBOURS_OP_WORD:
+            self._handle_update_all_neighbours(arguments)
+
+        elif op_word == libp2pproto.UPDATE_PREDECESSOR:
+            self._handle_update_predecessor(arguments)
+
+        elif op_word == libp2pproto.UPDATE_NEXT_SUCCESSOR:
+            self._handle_update_next_successor(arguments)
+
         else:
-            libp2puds.construct_unknown_res()
+            libp2pproto.construct_unknown_res()
+
+
+    def _handle_get_neighbours(self, arguments):
+        original_peer_id = int(arguments[libp2pproto.GetNeighboursArgs.NODE_ID.value])
+        original_ip_addr = arguments[libp2pproto.GetNeighboursArgs.NODE_IP_ADDR.value]
+        predecessor_id = self.predecessor_node[NODE_ID_INDEX]
+        predecessor_ip_addr = self.predecessor_node[NODE_IP_ADDR_INDEX]
+        successor_id = self.successor_node[NODE_ID_INDEX]
+        successor_ip_addr = self.successor_node[NODE_IP_ADDR_INDEX]
+        next_successor_id = self.next_successor_node[NODE_ID_INDEX]
+        next_successor_ip_addr = self.next_successor_node[NODE_IP_ADDR_INDEX]
+
+        if successor_id:
+            if self.peerid < original_peer_id < successor_id \
+                    or successor_id < self.peerid < original_peer_id \
+                    or original_peer_id < successor_id < self.peerid:
+
+                if not next_successor_id:
+                    next_successor_id = self.peerid
+                    next_successor_ip_addr = self.ip_addr
+
+                # Update incoming node to the network
+                self._send_udp_packet(original_ip_addr, libp2pproto.RET_NEIGHBOURS_OP_WORD, [self.peerid, self.ip_addr,
+                                                                                             successor_id, successor_ip_addr,
+                                                                                             next_successor_id, next_successor_ip_addr])
+                # Update current node
+                self.next_successor_node = self.successor_node
+                self.successor_node = (original_peer_id, original_ip_addr)
+
+                # Update predecessor's next successor
+                self._send_udp_packet(predecessor_ip_addr, libp2pproto.UPDATE_NEXT_SUCCESSOR, [original_peer_id, original_ip_addr])
+
+                # Update successor's predecessor
+                self._send_udp_packet(successor_ip_addr, libp2pproto.UPDATE_PREDECESSOR, [original_peer_id, original_ip_addr])
+
+        else:
+            # case where its only the genesis node in the network
+            self.successor_node = (original_peer_id, original_ip_addr)
+            self.predecessor_node = (original_peer_id, original_ip_addr)
+            self._send_udp_packet(original_ip_addr, libp2pproto.RET_NEIGHBOURS_OP_WORD, [self.peerid, self.ip_addr,
+                                                                                         self.peerid, self.ip_addr,
+                                                                                         None, None])
+
+
+    def _handle_update_all_neighbours(self, args):
+        self.predecessor_node = (utils.get_arguments(args, libp2pproto.RetNeighboursArgs.PREDECESSOR_ID.value, True),
+                                 utils.get_arguments(args, libp2pproto.RetNeighboursArgs.PREDECESSOR_IP_ADDR.value))
+        self.successor_node = (utils.get_arguments(args, libp2pproto.RetNeighboursArgs.SUCCESSOR_ID.value, True),
+                               utils.get_arguments(args, libp2pproto.RetNeighboursArgs.SUCCESSOR_IP_ADDR.value))
+        self.next_successor_node = (utils.get_arguments(args, libp2pproto.RetNeighboursArgs.NEXT_SUCCESSOR_ID.value, True),
+                                    utils.get_arguments(args, libp2pproto.RetNeighboursArgs.NEXT_SUCCESSOR_IP_ADDR.value))
+
+        print("Successor node id: ", self.successor_node[0], " Successor node ip addr: ", self.successor_node[1])
+        print("Next successor node id: ", self.next_successor_node[0], " Next successor node ip addr: ", self.next_successor_node[1])
+        print("Predecessor node id: ", self.predecessor_node[0], "Predecessor node ip addr: ", self.predecessor_node[1])
+
+    def _handle_update_predecessor(self, args):
+        self.predecessor_node = (utils.get_arguments(args, libp2pproto.UpdatePredecessorArgs.PREDECESSOR_ID.value, True),
+                                 utils.get_arguments(args, libp2pproto.UpdatePredecessorArgs.PREDECESSOR_IP_ADDR.value))
+
+
+    def _handle_update_next_successor(self, arguments):
+        self.next_successor_node = (utils.get_arguments(arguments, libp2pproto.UpdateNextSuccessorArgs.NEXT_SUCCESSOR_ID.value, True),
+                                    utils.get_arguments(arguments, libp2pproto.UpdateNextSuccessorArgs.NEXT_SUCCESSOR_IP_ADDR.value))
+
+
+
+    def _send_udp_packet(self, dst_ip_addr, protocol, args):
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        message = libp2pproto.construct_req_packet(protocol, args)
+        message = message.encode()
+        udp_socket.sendto(message, (dst_ip_addr, PEER_PORT))
+        udp_socket.close()
+
+
+    def _handle_udp_packets(self):
+        recv_data = self.peer_server_sock.recv(MAX_MSG_LEN)
+        if recv_data:
+            recv_data = recv_data.decode("utf-8")
+            try:
+                req = libp2pproto.parse_string_to_req_packet(recv_data)
+                self._process_p2p_request(req)
+
+                # Remove when done
+                # data.res_str = libp2puds.construct_unknown_res()
+            except ValueError as err:
+                if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
+                    pass
+                    # data.res_str = libp2puds.construct_malformed_res()
+
 
 
     def _handle_uds_connection(self, key):
         socket = key.fileobj
-        data   = key.data[1]
+        data = key.data[1]
 
         recv_data = socket.recv(1024)  # Should be ready to read
         if recv_data:
@@ -127,8 +224,13 @@ class P2PServer(object):
                 if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
                     data.res_str = libp2puds.construct_malformed_res()
 
-    def _handle_tcp_connection(self, key):
-        pass
+
+    def _process_uds_request(self, req):
+        op_word, arguments = req["op"], req["args"]
+        if op_word == libp2puds.INIT_PEER_TABLE_OP_WORD:
+            pass
+        else:
+            libp2puds.construct_unknown_res()
 
 
     def _handle_connection(self, key, mask):
@@ -138,7 +240,7 @@ class P2PServer(object):
             if dispatch_code == UDS_SOCKET_DISPATCH_CODE:
                 self._handle_uds_connection(key)
             else:
-                self._handle_tcp_connection(key)
+                self._handle_udp_packets(key)
 
         if mask & selectors.EVENT_WRITE:
             socket = key.fileobj
@@ -151,15 +253,22 @@ class P2PServer(object):
             socket.close()
 
 
+    def _accept_socket(self, socket, dispatch_code):
+        conn, addr = socket.accept()
+        conn.setblocking(False)
+
+        data = (dispatch_code, types.SimpleNamespace(addr=addr, req_str='', res_str=''))
+        events = selectors.EVENT_READ | selectors.EVENT_WRITE
+        self.selector.register(conn, events, data=data)
+
 
     def run(self):
         while True:
+            self._handle_udp_packets()
+
             events = self.selector.select(timeout=None)
             for key, mask in events:
                 if key.data[1] is None:
-                    self._accept_socket(key.fileobj, key.data[0]) # key.fileobj is the socket object
+                    self._accept_socket(key.fileobj, key.data[0])  # key.fileobj is the socket object
                 else:
                     self._handle_connection(key, mask)
-
-
-

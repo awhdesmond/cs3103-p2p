@@ -7,6 +7,11 @@ CS3103 Project
  3. `pip3 install virtualenv`
  4. `source /cs3103-env/bin/activate`
  5. Start developing
+ 
+Please start an instance of the dns server first by running `python3 p2pdns.py`
+
+To start an instance of the p2p node, run:
+`python3 p2pmain.py 127.0.X.X`
 
 > If you ever download a third-party python library, remember to `pip3 freeze > requirements.txt` to update the dependencies list.
 
@@ -37,8 +42,15 @@ dataline...`\r\n`
 
 
 ### P2P Server - P2P Server
-#### Requests
 General Format: `op` `[...args]\r\n`
+
+#### Node Joining Network
+  1. `GET_NEIGHBOURS <node_id> <node_ip_addr>`
+  2. `RET_NEIGHBOURS <predecessor_id> <predecessor_ip_addr> <successor_id> <successor_ip_addr> <next_successor_id> <next_succcessor_ip_addr>`
+  3. `UPDATE_NEXT_SUCCESSOR <next_successor_id> <next_succcessor_ip_addr>`
+  4. `UPDATE_PREDECESSOR <predecessor_id> <predecessor_ip_addr>`
+
+#### Requests
   
   1. `INIT_PEER_TABLE`
   2. `LIST_ALL_FILES`

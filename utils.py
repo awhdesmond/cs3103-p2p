@@ -48,3 +48,10 @@ def generate_peerid():
 
 def remove_empty_string_from_arr(arr):
     return list(filter(lambda x: x != '', arr))
+
+
+def get_arguments(args, index, is_int=False):
+    if args[index] == "-1":
+        return None
+    else:
+        return int(args[index]) if is_int else args[index]

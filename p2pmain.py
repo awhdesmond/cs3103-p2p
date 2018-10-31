@@ -18,9 +18,9 @@ CLIENT_ROOT_PATH = "./p2pvar/"
 
 class P2PMain(object):
 
-    def __init__(self):
+    def __init__(self, ip_addr):
         self.peerid = utils.generate_peerid()
-        self.p2p_server = P2PServer(self.peerid)
+        self.p2p_server = P2PServer(self.peerid, ip_addr)
         self.p2p_client = P2PClient(self.peerid)
 
     def _setup(self):
@@ -38,5 +38,6 @@ class P2PMain(object):
         self.p2p_client.run()
         
 if __name__ == "__main__":
-    p2pmain = P2PMain()
+    ip_addr = sys.argv[1]
+    p2pmain = P2PMain(ip_addr)
     p2pmain.run()
