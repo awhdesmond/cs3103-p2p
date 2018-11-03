@@ -8,8 +8,6 @@ import os
 import socket
 import _thread
 
-import utils
-
 from p2pserver import P2PServer
 from p2pclient import P2PClient
 
@@ -19,9 +17,9 @@ CLIENT_ROOT_PATH = "./p2pvar/"
 class P2PMain(object):
 
     def __init__(self, ip_addr):
-        self.peerid = utils.generate_peerid()
-        self.p2p_server = P2PServer(self.peerid, ip_addr)
-        self.p2p_client = P2PClient(self.peerid)
+        self.peer = Peer()
+        self.p2p_server = P2PServer(self.peer, ip_addr)
+        self.p2p_client = P2PClient()
 
     def _setup(self):
         # Create base directory to store files and chunks
