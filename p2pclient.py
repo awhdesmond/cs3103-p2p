@@ -16,9 +16,6 @@ CLIENT_ROOT_PATH = "./p2pvar/"
 
 class P2PClient(object):
 
-    def __init__(self, peerid):
-        self.peerid = peerid
-
     def setup(self):
         print("P2P Client Setup")
 
@@ -34,8 +31,6 @@ class P2PClient(object):
             data_string = data_string + data.decode("utf-8")
             try:
                 res = libp2puds.parse_string_to_res_packet(data_string)
-                # print("asd")
-                # print(res)
                 break
             except ValueError as err:
                 if int(str(err)) == libp2puds.INCOMPLETE_PACKET_ERROR:

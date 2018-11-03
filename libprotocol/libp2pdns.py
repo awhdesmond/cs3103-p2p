@@ -26,6 +26,10 @@ def parse_string_to_req_packet(string):
     else:
         raise ValueError(INCOMPLETE_PACKET_ERROR)
 
+## Construct Request Packets
+def construct_req_packet(op_word, *args):
+    return op_word + " ".join([str(a) for a in list(args)]) + " " + "\r\n"
+
 ## Construct Response Packets
 def construct_res_packet(code, message, data):
     datalines = ""
@@ -45,12 +49,12 @@ def construct_unknown_res():
 def parse_message_to_peer_list(string):
     if "\r\n" in string:
         peers = string.split("\r\n")
+        
         header_info = peers[0]
-        peer_list = []
+        peer_list   = []
+        
         for peer_index in range(1, len(peers) - 1): # to len(peers) - 1 here because of final \r\n in list
             peer_info = peers[peer_index].split(",")
-            index = peer_info[0]
-            peer_id = peer_info[1]
             ip_addr = peer_info[2]
             peer_list.append(ip_addr)
         return peer_list
