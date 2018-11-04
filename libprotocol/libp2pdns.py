@@ -28,7 +28,7 @@ def parse_string_to_req_packet(string):
 
 ## Construct Request Packets
 def construct_req_packet(op_word, *args):
-    return op_word + " ".join([str(a) for a in list(args)]) + " " + "\r\n"
+    return op_word + " " + " ".join([str(a) for a in list(args)]) + " " + "\r\n"
 
 ## Construct Response Packets
 def construct_res_packet(code, message, data):

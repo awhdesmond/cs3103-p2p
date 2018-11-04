@@ -44,7 +44,7 @@ def parse_string_to_res_packet(string):
         
         datalines = utils.remove_empty_string_from_arr(string.split("\r\n")[1:])
         num_data_bytes = int(status_line.split(" ")[-1])
-        if len(datalines) == num_data_bytes: 
+        if len(string[string.index("\r\n") + 2:]) == num_data_bytes: 
             ## OK HERE
             return {
                 "code": int(status_line.split(" ")[0]),
@@ -89,6 +89,9 @@ def construct_res_packet(code, message, data):
     data_bytes_len = len(datalines.encode())
     status_line = "%d %s %d\r\n" % (code, message, data_bytes_len)
     return status_line + datalines
+
+def construct_empty_ok_res():
+    return construct_res_packet(OK_RES_CODE, OK_RES_MSG, [])
 
 def construct_malformed_res():
     return construct_res_packet(MALFORMED_RES_CODE, MALFORMED_RES_MSG, [])
