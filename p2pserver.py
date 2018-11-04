@@ -16,7 +16,7 @@ from libprotocol import libp2puds, libp2pdns, libp2pproto
 CLIENT_UDS_PATH = "./p2pvar/uds_socket"
 CLIENT_ROOT_PATH = "./p2pvar/"
 
-DNS_IP_ADDR = "127.0.0.1"
+DNS_IP_ADDR = "192.168.1.170"
 DNS_PORT = 7494
 PEER_PORT = 7495
 
@@ -44,7 +44,7 @@ class P2PServer(object):
         self.uds_sock.bind(CLIENT_UDS_PATH)
 
         self.peer_server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.peer_server_sock.bind(("127.0.0.1", PEER_PORT))
+        self.peer_server_sock.bind(('', PEER_PORT))
 
     def setup(self):
         print("P2P Server Setup")
@@ -61,7 +61,7 @@ class P2PServer(object):
 
     
     def _send_p2p_tcp_packet(self, dst_ip_addr, packet):
-        # This should be blocking -- easier to reason about
+        # This should be blocking -- easier to reason about -- TODO: make not blocking
         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcp_socket.connect((dst_ip_addr, PEER_PORT))
         tcp_socket.sendall(packet.encode())
@@ -75,12 +75,108 @@ class P2PServer(object):
             if int(str(err)) == libp2pproto.MALFORMED_PACKET_ERROR:
                 raise err
 
+    def _handle_p2p_get_neighbors(self, new_peer_id, new_peer_ip_address):
+        if not self.peer.successor["id"]:
+            # I AM YOUR PREDECESSOR cause only has one node
+            print("I AM THE PREDECESSOR")
+            self.peer.successor  ["id"]      = new_peer_id
+            self.peer.successor  ["ip_addr"] = new_peer_ip_address
+            self.peer.predecessor["id"]      = new_peer_id
+            self.peer.predecessor["ip_addr"] = new_peer_ip_address
+
+            print("Updated Peer Information:")
+            print("Successor id:", self.peer.successor["id"])
+            print("Successor ip address:", self.peer.successor["ip_addr"])
+            print("Predecessor id:", self.peer.predecessor["id"])
+            print("Predecessor ip address:", self.peer.predecessor["ip_addr"])
+
+            data = "%d %s %d %s" % (self.peer.peer_id, self.ip_addr, self.peer.peer_id, self.ip_addr)
+            return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
+        else:
+            if new_peer_id > self.peer.predecessor["id"] and new_peer_id < self.peer.peer_id:
+                print("I AM YOUR SUCCESSOR")
+
+                data = "%d %s %d %s" % (self.peer.successor["id"], self.peer.successor["ip_addr"], self.peer.peer_id, self.ip_addr)
+                
+                self.peer.predecessor["id"]      = new_peer_id
+                self.peer.predecessor["ip_addr"] = new_peer_ip_address
+
+                print("Updated Peer Information:")
+                print("Successor id:", self.peer.successor["id"])
+                print("Successor ip address:", self.peer.successor["ip_addr"])
+                print("Predecessor id:", self.peer.predecessor["id"])
+                print("Predecessor ip address:", self.peer.predecessor["ip_addr"])
+
+                return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
+
+
+            if new_peer_id < self.peer.successor["id"] and new_peer_id > self.peer.peer_id:
+                print("I AM YOUR PREDECESSOR")
+                data = "%d %s %d %s" % (self.peer.peer_id, self.ip_addr, self.peer.successor["id"], self.peer.successor["ip_addr"])
+
+                self.peer.successor["id"] = new_peer_id
+                self.peer.successor["ip_addr"] = new_peer_ip_address
+
+                print("Updated Peer Information:")
+                print("Successor id:", self.peer.successor["id"])
+                print("Successor ip address:", self.peer.successor["ip_addr"])
+                print("Predecessor id:", self.peer.predecessor["id"])
+                print("Predecessor ip address:", self.peer.predecessor["ip_addr"])
+                    
+                return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
+
+
+            if new_peer_id > self.peer.peer_id and new_peer_id > self.peer.successor["id"]:
+                if self.peer.successor["id"] < self.peer.peer_id: # WRAP AROUND
+                    print("I AM YOUR PREDECESSOR")
+                    
+                    data = "%d %s %d %s" % (self.peer.peer_id, self.ip_addr, self.peer.successor["id"], self.peer.successor["ip_addr"])
+
+                    self.peer.successor["id"]      = new_peer_id
+                    self.peer.successor["ip_addr"] = new_peer_ip_address
+
+                    print("Updated Peer Information:")
+                    print("Successor id:", self.peer.successor["id"])
+                    print("Successor ip address:", self.peer.successor["ip_addr"])
+                    print("Predecessor id:", self.peer.predecessor["id"])
+                    print("Predecessor ip address:", self.peer.predecessor["ip_addr"])
+                    
+                    return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
+                else:
+                    print("ASK MY SUCCESSOR")
+                    req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_NEIGHBOURS_OP_WORD, [new_peer_id, new_peer_ip_address])
+                    res_pkt = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet)
+                    return libp2pproto.construct_res_packet(res_pkt["code"], res_pkt["msg"], res_pkt["data"])
+                
+            if new_peer_id < self.peer.peer_id and new_peer_id < self.peer.successor["id"]:
+                if self.peer.successor["id"] < self.peer.peer_id: # WRAP AROUND
+                    print("I AM YOUR PREDECESSOR")
+
+                    data = "%d %s %d %s" % (self.peer.peer_id, self.ip_addr, self.peer.successor["id"], self.peer.successor["ip_addr"])
+
+                    self.peer.successor["id"]      = new_peer_id
+                    self.peer.successor["ip_addr"] = new_peer_ip_address
+
+                    print("Updated Peer Information:")
+                    print("Successor id:", self.peer.successor["id"])
+                    print("Successor ip address:", self.peer.successor["ip_addr"])
+                    print("Predecessor id:", self.peer.predecessor["id"])
+                    print("Predecessor ip address:", self.peer.predecessor["ip_addr"])
+                    
+                    return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
+                else:
+                    print("ASK MY SUCCESSOR")
+                    req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_NEIGHBOURS_OP_WORD, [new_peer_id, new_peer_ip_address])
+                    res_pkt = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet)
+                    return libp2pproto.construct_res_packet(res_pkt["code"], res_pkt["msg"], res_pkt["data"])
+
 
     def _process_p2p_request(self, req):
+        print(req)
         op_word, arguments = req["op"], req["args"]
 
         if op_word == libp2pproto.GET_NEIGHBOURS_OP_WORD:
-            return libp2pproto.construct_unknown_res()
+            return self._handle_p2p_get_neighbors(int(arguments[libp2pproto.GET_NEIGHBOURS_PEER_ID_INDEX]), arguments[libp2pproto.GET_NEIGHBOURS_PEER_IP_ADDR_INDEX])
         else:
             return libp2pproto.construct_unknown_res()
 
@@ -97,8 +193,6 @@ class P2PServer(object):
             except ValueError as err:
                 if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
                     data.res_str = libp2puds.construct_malformed_res()
-
-
 
     def _retrieve_peer_ip_addresses(self):
         # TODO: handle case if DNS is not up.
@@ -128,8 +222,19 @@ class P2PServer(object):
             print("Chosen peer_ip addr: ", chosen_peer_ip_addr)
 
             req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_NEIGHBOURS_OP_WORD, [self.peer.peer_id, self.ip_addr])
-            self._send_p2p_tcp_packet(chosen_peer_ip_addr, req_packet)
+            res_packet = self._send_p2p_tcp_packet(chosen_peer_ip_addr, req_packet)
+            data = res_packet["data"][0].split(" ")
+            self.peer.predecessor["id"]      = int(data[0])
+            self.peer.predecessor["ip_addr"] = data[1]
+            self.peer.successor["id"]        = int(data[2])
+            self.peer.successor["ip_addr"]   = data[3]
+            
 
+            print("Updated Peer Information:")
+            print("Successor id:", self.peer.successor["id"])
+            print("Successor ip address:", self.peer.successor["ip_addr"])
+            print("Predecessor id:", self.peer.predecessor["id"])
+            print("Predecessor ip address:", self.peer.predecessor["ip_addr"])
             
     def _process_uds_request(self, req):
         op_word, arguments = req["op"], req["args"]

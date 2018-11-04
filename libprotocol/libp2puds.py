@@ -44,7 +44,7 @@ def parse_string_to_res_packet(string):
         
         datalines = utils.remove_empty_string_from_arr(string.split("\r\n")[1:])
         num_data_bytes = int(status_line.split(" ")[-1])
-        if len(datalines) == num_data_bytes: 
+        if len(string[string.index("\r\n") + 2:]) == num_data_bytes: 
             ## OK HERE
             return {
                 "code": int(status_line.split(" ")[0]),

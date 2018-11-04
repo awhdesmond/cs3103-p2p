@@ -10,8 +10,7 @@ class Peer(object):
 
     def __init__(self):
         self.peer_id        = utils.generate_peerid()
-        self.successor      = None # {id, ip_addr}
-        self.next_successor = None # {id, ip_addr}
-        self.predecessor    = None # {id, ip_addr}
-
+        self.successor      = {"id": None, "ip_addr": None} 
+        self.predecessor    = {"id": None, "ip_addr": None}
+        print("My peer_id is: %d" % (self.peer_id,))
 

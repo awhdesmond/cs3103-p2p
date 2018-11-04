@@ -12,9 +12,7 @@ import sqlite3
 
 from libprotocol import libp2pdns
 
-HOST    = '127.0.0.1'  # Standard loopback interface address (localhost)
-PORT    = 7494         # Port to listen on (non-privileged ports are > 1023)
-
+PORT = 7494
 DB_NAME = 'p2pdns.db'
 MAX_MSG_LEN = 1024
 
@@ -22,7 +20,7 @@ class P2PDns(object):
 
     def __init__(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((HOST, PORT))
+        self.server_socket.bind(('', PORT))
         self.dbconn = sqlite3.connect(DB_NAME)
 
     def _setup_db(self):
@@ -82,7 +80,7 @@ class P2PDns(object):
         self._setup_db()
         self.server_socket.listen()
         
-        print("P2P DNS Server listening on %s:%d" % (HOST, PORT))
+        print("P2P DNS Server listening on port:%d" % (PORT,))
 
         while 1:
             conn, addr = self.server_socket.accept()

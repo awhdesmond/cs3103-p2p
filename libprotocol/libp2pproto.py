@@ -32,29 +32,11 @@ UNKNOWN_RES_MSG  = "OPERATION UNKNOWN"
 FILE_NOT_FOUND_CODE = 404
 FILE_NOT_FOUND_MSG  = "FILE NOT FOUND"
 
-class GetNeighboursArgs(Enum):
+class GetNeighboursDataArgs(Enum):
     PREDECESSOR_ID = 0
     PREDECESSOR_IP_ADDR = 1
     SUCCESSOR_ID = 2
     SUCCESSOR_IP_ADDR = 3
-    NEXT_SUCCESSOR_ID = 4
-    NEXT_SUCCESSOR_IP_ADDR = 5
-
-class RetNeighboursArgs(Enum):
-    PREDECESSOR_ID = 0
-    PREDECESSOR_IP_ADDR = 1
-    SUCCESSOR_ID = 2
-    SUCCESSOR_IP_ADDR = 3
-    NEXT_SUCCESSOR_ID = 4
-    NEXT_SUCCESSOR_IP_ADDR = 5
-
-class UpdateNextSuccessorArgs(Enum):
-    NEXT_SUCCESSOR_ID = 0
-    NEXT_SUCCESSOR_IP_ADDR = 1
-
-class UpdatePredecessorArgs(Enum):
-    PREDECESSOR_ID = 0
-    PREDECESSOR_IP_ADDR = 1
 
 
 def parse_string_to_req_packet(string):
@@ -72,7 +54,31 @@ def parse_string_to_req_packet(string):
         raise ValueError(INCOMPLETE_PACKET_ERROR)
 
 def parse_string_to_res_packet(string):
-    pass
+    if "\r\n" in string:
+
+        status_line = string.split("\r\n")[0] 
+        status_tokens = status_line.split(" ")
+        if len(status_tokens) < 3: # CHECK MALFORM STATUS LINE
+            raise ValueError(MALFORMED_PACKET_ERROR)
+        
+        datalines = utils.remove_empty_string_from_arr(string.split("\r\n")[1:])
+        num_data_bytes = int(status_line.split(" ")[-1])
+        if len(string[string.index("\r\n") + 2:]) == num_data_bytes: 
+            ## OK HERE
+            return {
+                "code": int(status_line.split(" ")[0]),
+                "msg": status_line.split(" ")[1:-1],
+                "data": list(map(lambda x: x.strip(), datalines))
+            }
+        elif len(datalines) < num_data_bytes: 
+            ## still got more to receive
+            raise ValueError(INCOMPLETE_PACKET_ERROR)
+        else: 
+            # data do not match data length
+            raise ValueError(MALFORMED_PACKET_ERROR) 
+    else:
+        ## still got more to receive
+        raise ValueError(INCOMPLETE_PACKET_ERROR)
 
 def construct_req_packet(op_word, arguments):
     args = []
