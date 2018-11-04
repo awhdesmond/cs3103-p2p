@@ -8,6 +8,7 @@ import os
 import socket
 import _thread
 
+from peer import Peer
 from p2pserver import P2PServer
 from p2pclient import P2PClient
 

@@ -90,6 +90,9 @@ def construct_res_packet(code, message, data):
     status_line = "%d %s %d\r\n" % (code, message, data_bytes_len)
     return status_line + datalines
 
+def construct_empty_ok_res():
+    return construct_res_packet(OK_RES_CODE, OK_RES_MSG, [])
+
 def construct_malformed_res():
     return construct_res_packet(MALFORMED_RES_CODE, MALFORMED_RES_MSG, [])
 

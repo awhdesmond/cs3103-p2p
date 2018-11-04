@@ -14,6 +14,7 @@ from libprotocol import libp2pdns
 
 HOST    = '127.0.0.1'  # Standard loopback interface address (localhost)
 PORT    = 7494         # Port to listen on (non-privileged ports are > 1023)
+
 DB_NAME = 'p2pdns.db'
 MAX_MSG_LEN = 1024
 
