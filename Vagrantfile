@@ -28,6 +28,18 @@ Vagrant.configure("2") do |config|
     charlie.vm.hostname = "charlie"
   end
 
+  config.vm.define :delta do |delta|
+    delta.vm.box = "ubuntu/xenial64"
+    delta.vm.network "private_network", ip: "192.168.1.174"
+    delta.vm.hostname = "delta"
+  end
+
+  config.vm.define :echo do |echo|
+    echo.vm.box = "ubuntu/xenial64"
+    echo.vm.network "private_network", ip: "192.168.1.175"
+    echo.vm.hostname = "echo"
+  end
+
 end
 
 

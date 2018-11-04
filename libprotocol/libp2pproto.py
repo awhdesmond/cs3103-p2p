@@ -16,9 +16,17 @@ GET_NEIGHBOURS_OP_WORD = "GET_NEIGHBOURS"
 GET_NEIGHBOURS_PEER_ID_INDEX = 0
 GET_NEIGHBOURS_PEER_IP_ADDR_INDEX = 1
 
-RET_NEIGHBOURS_OP_WORD = "RET_NEIGHBOURS"
-UPDATE_NEXT_SUCCESSOR = "UPDATE_NEXT_SUCCESSOR"
-UPDATE_PREDECESSOR = "UPDATE_PREDECESSOR"
+INFORM_SUCCESSOR_OP_WORD = "INFORM_SUCCESSOR"
+INFORM_SUCCESSOR_PEER_ID_INDEX = 0
+INFORM_SUCCESSOR_PEER_IP_ADDR_INDEX = 1
+
+INFORM_PREDECESSOR_OP_WORD = "INFORM_PREDECESSOR"
+INFORM_PREDECESSOR_PEER_ID_INDEX = 0
+INFORM_PREDECESSOR_PEER_IP_ADDR_INDEX = 1
+
+QUERY_SUCCESSOR_FOR_PREDECESSOR_OP_WORD = "QUERY_SUCCESSOR_FOR_PREDECESSOR" 
+QUERY_SUCCESSOR_FOR_PREDECESSOR_PEER_ID_INDEX = 0
+QUERY_SUCCESSOR_FOR_PREDECESSOR_PEER_IP_ADDR_INDEX = 1
 
 OK_RES_CODE = 200
 OK_RES_MSG  = "OK"
@@ -37,7 +45,6 @@ class GetNeighboursDataArgs(Enum):
     PREDECESSOR_IP_ADDR = 1
     SUCCESSOR_ID = 2
     SUCCESSOR_IP_ADDR = 3
-
 
 def parse_string_to_req_packet(string):
     if "\r\n" in string:
@@ -80,14 +87,8 @@ def parse_string_to_res_packet(string):
         ## still got more to receive
         raise ValueError(INCOMPLETE_PACKET_ERROR)
 
-def construct_req_packet(op_word, arguments):
-    args = []
-    for arg in arguments:
-        if arg:
-            args.append(str(arg))
-        else:
-            args.append('-1')
-    return op_word + ' ' + ' '.join(args) + '\r\n'
+def construct_req_packet(op_word, *args):
+    return op_word + " " + " ".join([str(a) for a in list(args)]) + " " + "\r\n"
 
 def construct_res_packet(code, message, data):
     datalines = ""
