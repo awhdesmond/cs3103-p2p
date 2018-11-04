@@ -15,6 +15,17 @@ To start an instance of the p2p node, run:
 
 > If you ever download a third-party python library, remember to `pip3 freeze > requirements.txt` to update the dependencies list.
 
+## Testing
+  1. Install Vagrant and Virtualbox
+  2. `cd` to the directory
+  3. `vagrant up` and wait for it to initialise
+  4. `vagrant ssh dns/alpha/beta/charlie/delta/echo` into either vm.
+  5. To transfer file, run `vagrant config-ssh` to check the port of the vm
+  6. cd to parent dir and `sudo scp -P <PORT> -i ./cs3103-p2p/.vagrant/machines/<VM NAME>/virtualbox/private_key -r cs3103-p2p/ vagrant@127.0.0.1:/home/vagrant`
+  7. Run `p2pdns.py` in `dns` vm.
+  8. Run `p2pmain.py` in the other peers
+
+
 ## Components
 
 ### P2P DNS
