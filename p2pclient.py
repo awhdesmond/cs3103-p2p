@@ -13,31 +13,38 @@ from libprotocol import libp2puds
 # CONSTANTS
 CLIENT_UDS_PATH  = "./p2pvar/uds_socket"
 CLIENT_ROOT_PATH = "./p2pvar/"
+MAX_PACKET_SIZE = 1024
 
 class P2PClient(object):
+
+    def _send_uds_request(self, packet):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(CLIENT_UDS_PATH)
+        sock.sendall(packet.encode())
+        data_string = ""
+        while True:
+            try:
+                data = sock.recv(MAX_PACKET_SIZE)
+                data_string = data_string + data.decode("utf-8")
+                print("-------", data_string)
+                return libp2puds.parse_string_to_res_packet(data_string)
+            except ValueError as err:
+                if int(str(err)) == libp2puds.INCOMPLETE_PACKET_ERROR:
+                    continue
+                if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
+                    raise err
+        sock.close()
 
     def setup(self):
         print("P2P Client Setup")
 
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(CLIENT_UDS_PATH)
-
         init_peer_table_req = libp2puds.construct_init_req()
-        sock.sendall(init_peer_table_req.encode())
 
-        data_string = ""
-        while True: 
-            data = sock.recv(1024)
-            data_string = data_string + data.decode("utf-8")
-            try:
-                res = libp2puds.parse_string_to_res_packet(data_string)
-                break
-            except ValueError as err:
-                if int(str(err)) == libp2puds.INCOMPLETE_PACKET_ERROR:
-                    continue
-                else: 
-                    exit(libp2puds.MALFORMED_PACKET_ERROR)
-        sock.close()
+        try:
+            self._send_uds_request(init_peer_table_req)
+        except ValueError as err:
+            if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
+                exit(libp2puds.MALFORMED_PACKET_ERROR)
 
     def _render_user_menu(self):
         print("Group 14 P2P Client")
@@ -51,14 +58,21 @@ class P2PClient(object):
     def _process_user_option(self, user_option):
     
         if user_option == "1":
-            pass
+            list_req = libp2puds.construct_list_files_req()
+            self._send_uds_request(list_req)
         elif user_option == "2":
             filename = input('Enter filename: ')
+            search_req = libp2puds.construct_search_file_req(filename)
+            self._send_uds_request(search_req)
         elif user_option == "3":
             filename = input('Enter filename: ')
+            download_req = libp2puds.construct_download_file_req(filename)
+            self._send_uds_request(download_req)
         elif user_option == "4":
             filepath = input('Enter filepath: ')
             # copy file from filepath to program root dir & seed
+            upload_req = libp2puds.construct_upload_file_req(os.path.basename(filepath))
+            self._send_uds_request(upload_req)
         else:
             pass
 

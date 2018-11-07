@@ -9,6 +9,8 @@ import socket
 import types
 import selectors
 import utils
+import sqlite3
+import json
 from random import randrange
 from apscheduler.schedulers.background import BackgroundScheduler
 from libprotocol import libp2puds, libp2pdns, libp2pproto
@@ -17,7 +19,7 @@ from libprotocol import libp2puds, libp2pdns, libp2pproto
 CLIENT_UDS_PATH = "./p2pvar/uds_socket"
 CLIENT_ROOT_PATH = "./p2pvar/"
 
-DNS_IP_ADDR = "192.168.1.170"
+DNS_IP_ADDR = "192.168.2.170"
 DNS_PORT = 7494
 PEER_PORT = 7495
 STABILISATION_INTERVAL = 10
@@ -25,6 +27,9 @@ STABILISATION_INTERVAL = 10
 MAX_PACKET_SIZE = 1024
 UDS_SOCKET_DISPATCH_CODE = 1
 TCP_SOCKET_DISPATCH_CODE = 2
+
+DB_NAME = 'p2pdht.db'
+SELECT_QUERY = "SELECT * FROM p2pdht WHERE filename=?"
 
 class P2PServer(object):
     
@@ -63,12 +68,13 @@ class P2PServer(object):
         self.selector.register(self.peer_server_sock, selectors.EVENT_READ, data=(TCP_SOCKET_DISPATCH_CODE, None))
 
     
-    def _send_p2p_tcp_packet(self, dst_ip_addr, packet):
+    def _send_p2p_tcp_packet(self, dst_ip_addr, packet, recv):
         # This should be blocking -- easier to reason about -- TODO: make not blocking
         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcp_socket.connect((dst_ip_addr, PEER_PORT))
         tcp_socket.sendall(packet.encode())
-
+        if(recv == False):
+            return
         # TODO: Incomplete-Packet error handling
         res = tcp_socket.recv(MAX_PACKET_SIZE)  
         res_str = res.decode("utf-8")
@@ -132,7 +138,7 @@ class P2PServer(object):
             else:
                 print("Recursively ask my successor")
                 req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_NEIGHBOURS_OP_WORD, new_peer_id, new_peer_ip_address)
-                res_pkt = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet)
+                res_pkt = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet, True)
                 return libp2pproto.construct_res_packet(res_pkt["code"], res_pkt["msg"], res_pkt["data"])
             
         if new_peer_id < self.peer.peer_id and new_peer_id < self.peer.successor["id"]:
@@ -149,7 +155,7 @@ class P2PServer(object):
             else:
                 print("Recursively ask my successor")
                 req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_NEIGHBOURS_OP_WORD, new_peer_id, new_peer_ip_address)
-                res_pkt = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet)
+                res_pkt = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet, True)
                 return libp2pproto.construct_res_packet(res_pkt["code"], res_pkt["msg"], res_pkt["data"])
 
     def _handle_p2p_inform_predecessor(self, peer_id, ip_addr):
@@ -188,6 +194,25 @@ class P2PServer(object):
         if op_word == libp2pproto.QUERY_SUCCESSOR_FOR_PREDECESSOR_OP_WORD:
             return self._handle_p2p_query_successor_for_predecessor()
 
+        if op_word == libp2pproto.PUT_FILE_OP_WORD:
+            filename = arguments[libp2pproto.PUT_FILE_FILENAME_INDEX]
+            ip_addr = arguments[libp2pproto.PUT_FILE_IP_ADDR_INDEX]
+            msg_type = int(arguments[libp2pproto.PUT_FILE_MSG_TYPE_INDEX])
+            return self._handle_put_request(filename, ip_addr, msg_type)
+
+        if op_word == libp2pproto.GET_FILE_OP_WORD:
+            filename = arguments[libp2pproto.GET_FILE_FILENAME_INDEX]
+            ip_addr = arguments[libp2pproto.GET_FILE_IP_ADDR_INDEX]
+            msg_type = int(arguments[libp2pproto.GET_FILE_MSG_TYPE_INDEX])
+            return self._handle_search_request(filename, ip_addr, msg_type)
+        
+        if op_word == libp2pproto.LIST_FILES_OP_WORD:
+            file_str = arguments[libp2pproto.LIST_FILES_FILE_STR_INDEX]
+            ip_addr = arguments[libp2pproto.LIST_FILES_IP_ADDR_INDEX]
+            hop_count = int(arguments[libp2pproto.LIST_FILES_HOP_COUNT_INDEX])
+            return self._handle_list_request(file_str, ip_addr, hop_count)
+
+        
         return libp2pproto.construct_unknown_res()
 
     def _stabilisation(self):
@@ -196,7 +221,7 @@ class P2PServer(object):
             return
 
         stab_packet = libp2pproto.construct_req_packet(libp2pproto.QUERY_SUCCESSOR_FOR_PREDECESSOR_OP_WORD)
-        res_packet = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], stab_packet)
+        res_packet = self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], stab_packet, True)
         
         if res_packet is not None:
             data = res_packet["data"][0].split(" ")
@@ -207,7 +232,7 @@ class P2PServer(object):
                 self.peer.successor["id"]        = int(data[0])
                 self.peer.successor["ip_addr"]   = data[1]
                 inform_packet = libp2pproto.construct_req_packet(libp2pproto.INFORM_SUCCESSOR_OP_WORD, self.peer.peer_id, self.ip_addr)
-                self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], inform_packet)
+                self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], inform_packet, True)
             else:
                 print("There is no change")
 
@@ -235,7 +260,7 @@ class P2PServer(object):
             print("Chosen peer_ip addr: ", chosen_peer_ip_addr)
 
             req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_NEIGHBOURS_OP_WORD, self.peer.peer_id, self.ip_addr)
-            res_packet = self._send_p2p_tcp_packet(chosen_peer_ip_addr, req_packet)
+            res_packet = self._send_p2p_tcp_packet(chosen_peer_ip_addr, req_packet, True)
             data = res_packet["data"][0].split(" ")
             self.peer.predecessor["id"]      = int(data[0])
             self.peer.predecessor["ip_addr"] = data[1]
@@ -245,11 +270,11 @@ class P2PServer(object):
 
             print("Informing my predecessor to add me as its successor")
             inform_packet = libp2pproto.construct_req_packet(libp2pproto.INFORM_PREDECESSOR_OP_WORD, self.peer.peer_id, self.ip_addr)
-            self._send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], inform_packet)
+            self._send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], inform_packet, True)
 
             print("Informing my successor to add me as its predecessor")
             inform_packet = libp2pproto.construct_req_packet(libp2pproto.INFORM_SUCCESSOR_OP_WORD, self.peer.peer_id, self.ip_addr)
-            self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], inform_packet)
+            self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], inform_packet, True)
 
         self.scheduler.add_job(self._stabilisation, 'interval', seconds=STABILISATION_INTERVAL)
         self.scheduler.start()
@@ -279,8 +304,26 @@ class P2PServer(object):
             peer_ip_addresses = self._retrieve_peer_ip_addresses()
             self._enter_p2p_network(peer_ip_addresses)
             return libp2puds.construct_empty_ok_res()
-        else:
-            return libp2puds.construct_unknown_res()
+        if op_word == libp2puds.UPLOAD_FILE_OP_WORD:
+            filename = arguments[libp2pproto.PUT_FILE_FILENAME_INDEX]
+            ip_addr = self.ip_addr
+            self._handle_put_request(filename, ip_addr, libp2pproto.REQUEST_MSG)
+            return libp2puds.construct_empty_ok_res()
+        if op_word == libp2puds.DOWNLOAD_FILE_OP_WORD:
+            filename = arguments[libp2pproto.GET_FILE_FILENAME_INDEX]
+            ip_addr = self.ip_addr
+            self._handle_search_request(filename, ip_addr, libp2pproto.REQUEST_MSG)
+            return libp2puds.construct_empty_ok_res()
+        if op_word == libp2puds.LIST_ALL_FILES_OP_WORD:
+            self._handle_list_request("None", self.ip_addr, 0)
+            return libp2puds.construct_empty_ok_res()
+        if op_word == libp2puds.SEARCH_FILE_OP_WORD:
+            filename = arguments[libp2pproto.GET_FILE_FILENAME_INDEX]
+            ip_addr = self.ip_addr
+            self._handle_search_request(filename, ip_addr, libp2pproto.REQUEST_MSG)
+            return libp2puds.construct_empty_ok_res()
+        
+        return libp2puds.construct_unknown_res()
 
 
     def _handle_uds_connection(self, key):
@@ -324,8 +367,146 @@ class P2PServer(object):
         events = selectors.EVENT_READ | selectors.EVENT_WRITE
         self.selector.register(conn, events, data=data)
 
+    def _handle_put_request(self, filename, ip_addr, msg_type):
+        if(msg_type == libp2pproto.RESPONSE_MSG):
+            print("%s successfully placed" % filename)
+            return libp2puds.construct_empty_ok_res()
+        
+        filename_hash = utils.consistent_hash(filename.encode())
+        print("filenamehash: %d"%filename_hash)
+        # this node is responsible
+        if((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
+            #filehash is larger than all peers
+            or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
+            #filehash is smaller than all peers
+            or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id)):
+            print('inserting!')
+            insert_query = """
+                INSERT INTO p2pdht (filename, ip_addr_list) VALUES (?, ?)
+            """
+            cursor = self.dbconn.cursor()
+            cursor.execute(SELECT_QUERY, (filename,))
+            db_result = cursor.fetchone()
+            print(db_result)
+            ip_addr_list = list()
+            if(db_result != None):
+                print(db_result[2])
+                print(type(db_result[2]))
+                ip_addr_list = json.loads(db_result[2])
+                update_query = """
+                UPDATE p2pdht SET ip_addr_list=? WHERE id=?
+                """
+                ip_addr_list.append(ip_addr)
+                cursor.execute(update_query, (json.dumps(ip_addr_list), int(db_result[0])))
+            else:
+                ip_addr_list.append(ip_addr)
+                cursor.execute(insert_query, (filename, json.dumps(ip_addr_list)))
+            self.dbconn.commit()
+            if(ip_addr == self.ip_addr):
+                print("%s successfully placed" % filename)
+                return 
+            print('inserted! sending response')
+            req_packet = libp2pproto.construct_req_packet(libp2pproto.PUT_FILE_OP_WORD, filename, ip_addr, libp2pproto.RESPONSE_MSG)
+            self._send_p2p_tcp_packet(ip_addr,req_packet, True)
+            print('response sent!')
+            return
+        # send request to next successor
+        req_packet = libp2pproto.construct_req_packet(libp2pproto.PUT_FILE_OP_WORD, filename, ip_addr, libp2pproto.REQUEST_MSG)
+        # TODO: error handling
+        self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet, False)
+        return
 
+    def _handle_search_request(self, filename, ip_addr, msg_type):
+        # handle responsible node replying to source node
+        if(msg_type == libp2pproto.RESPONSE_MSG):
+            if(ip_addr == '-1'):
+                print("%s not found" % filename)
+            else:
+                print('Found %s, available at the following peers:' % filename)
+                print(json.loads(ip_addr))
+            return libp2puds.construct_empty_ok_res()
+        filename_hash = utils.consistent_hash(filename.encode())
+        if((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
+            #filehash is larger than all peers
+            or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
+            #filehash is smaller than all peers
+            or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id)):
+            print('at responsible node')
+            cursor = self.dbconn.cursor()
+            cursor.execute(SELECT_QUERY, (filename,))
+            datum = cursor.fetchone()
+            if(datum == None):
+                print('file not found')
+                if(ip_addr == self.ip_addr):
+                    print('file not found on source node')
+                    return
+                err_packet = libp2pproto.construct_req_packet(libp2pproto.GET_FILE_OP_WORD,filename,'-1',libp2pproto.RESPONSE_MSG)
+                self._send_p2p_tcp_packet(ip_addr, err_packet, False)
+                return
+            ip_addr_str = datum[2].replace(' ', '')
+            print(datum[2])
+            if(ip_addr == self.ip_addr):
+                if(ip_addr == None):
+                    print("%s not found" % filename)
+                else:
+                    print('Found %s, available at the following peers:' % filename)
+                    print(json.loads(ip_addr_str))
+                return
+            req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_FILE_OP_WORD,filename,ip_addr_str,libp2pproto.RESPONSE_MSG)
+            print('file found, sending response')
+            self._send_p2p_tcp_packet(ip_addr, req_packet, True)
+            print('sent!!')
+            return 
+        # send request to next successor
+        req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_FILE_OP_WORD, filename, ip_addr, libp2pproto.REQUEST_MSG)
+        print('SENDING PACKET: %s' %req_packet)
+        # TODO: error handling
+        self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet, False)
+        return
+
+    def _handle_list_request(self, files_str, ip_addr, hop_count):
+        if(hop_count != 0 and ip_addr == self.ip_addr):
+            print('terminating')
+            if(files_str != 'None'):
+                print('FILES AVAILABLE:')
+                files = json.loads(files_str)
+                for datum in files:
+                    print(datum)
+            else:
+                print('No Files Found')
+            return libp2puds.construct_empty_ok_res()
+        
+        select_query = "SELECT * FROM p2pdht"
+        cursor = self.dbconn.cursor()
+        cursor.execute(select_query)
+        data = cursor.fetchall()
+        if(len(data) != 0):
+            files = list()
+            for datum in data:
+                files.append(datum[1])
+            if(files_str != 'None'):
+                file_list = json.loads(files_str)
+                file_list.extend(files)
+            files_str = json.dumps(files).replace(' ', '')
+
+        hop_count += 1
+        req_packet = libp2pproto.construct_req_packet(libp2pproto.LIST_FILES_OP_WORD, files_str, ip_addr, hop_count)
+        self._send_p2p_tcp_packet(self.peer.successor['ip_addr'], req_packet, False)
+        return libp2puds.construct_empty_ok_res()
+
+
+
+    def _setup_db(self):
+        query = """
+            CREATE TABLE IF NOT EXISTS p2pdht (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT,  ip_addr_list TEXT)
+        """
+        cursor = self.dbconn.cursor()
+        cursor.execute(query)
+        self.dbconn.commit()
+        
     def run(self):
+        self.dbconn = sqlite3.connect(DB_NAME)
+        self._setup_db()
         while True:
             events = self.selector.select(timeout=None)
             for key, mask in events:
