@@ -162,12 +162,14 @@ class P2PServer(object):
         self.peer.successor["id"]      = peer_id
         self.peer.successor["ip_addr"] = ip_addr
         self.peer.print_info()
+        self._update_responsible_keys()
         return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [])
 
     def _handle_p2p_inform_successor(self, peer_id, ip_addr):
         self.peer.predecessor["id"]      = peer_id
         self.peer.predecessor["ip_addr"] = ip_addr
         self.peer.print_info()
+        self._update_responsible_keys()
         return libp2pproto.construct_res_packet(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [])
 
     def _handle_p2p_query_successor_for_predecessor(self):
@@ -372,26 +374,16 @@ class P2PServer(object):
             print("%s successfully placed" % filename)
             return libp2puds.construct_empty_ok_res()
         
-        filename_hash = utils.consistent_hash(filename.encode())
-        print("filenamehash: %d"%filename_hash)
         # this node is responsible
-        if((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
-            #filehash is larger than all peers
-            or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
-            #filehash is smaller than all peers
-            or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id)):
-            print('inserting!')
+        if(self._check_filename_responsibility(filename)):
             insert_query = """
                 INSERT INTO p2pdht (filename, ip_addr_list) VALUES (?, ?)
             """
             cursor = self.dbconn.cursor()
             cursor.execute(SELECT_QUERY, (filename,))
             db_result = cursor.fetchone()
-            print(db_result)
             ip_addr_list = list()
             if(db_result != None):
-                print(db_result[2])
-                print(type(db_result[2]))
                 ip_addr_list = json.loads(db_result[2])
                 update_query = """
                 UPDATE p2pdht SET ip_addr_list=? WHERE id=?
@@ -425,48 +417,34 @@ class P2PServer(object):
                 print('Found %s, available at the following peers:' % filename)
                 print(json.loads(ip_addr))
             return libp2puds.construct_empty_ok_res()
-        filename_hash = utils.consistent_hash(filename.encode())
-        if((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
-            #filehash is larger than all peers
-            or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
-            #filehash is smaller than all peers
-            or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id)):
-            print('at responsible node')
+        
+        if(self._check_filename_responsibility(filename)):
             cursor = self.dbconn.cursor()
             cursor.execute(SELECT_QUERY, (filename,))
             datum = cursor.fetchone()
             if(datum == None):
-                print('file not found')
                 if(ip_addr == self.ip_addr):
-                    print('file not found on source node')
+                    print("%s not found" % filename)
                     return
                 err_packet = libp2pproto.construct_req_packet(libp2pproto.GET_FILE_OP_WORD,filename,'-1',libp2pproto.RESPONSE_MSG)
                 self._send_p2p_tcp_packet(ip_addr, err_packet, False)
                 return
             ip_addr_str = datum[2].replace(' ', '')
-            print(datum[2])
             if(ip_addr == self.ip_addr):
-                if(ip_addr == None):
-                    print("%s not found" % filename)
-                else:
-                    print('Found %s, available at the following peers:' % filename)
-                    print(json.loads(ip_addr_str))
+                print('Found %s, available at the following peers:' % filename)
+                print(json.loads(ip_addr_str))
                 return
             req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_FILE_OP_WORD,filename,ip_addr_str,libp2pproto.RESPONSE_MSG)
-            print('file found, sending response')
             self._send_p2p_tcp_packet(ip_addr, req_packet, True)
-            print('sent!!')
             return 
         # send request to next successor
         req_packet = libp2pproto.construct_req_packet(libp2pproto.GET_FILE_OP_WORD, filename, ip_addr, libp2pproto.REQUEST_MSG)
-        print('SENDING PACKET: %s' %req_packet)
         # TODO: error handling
         self._send_p2p_tcp_packet(self.peer.successor["ip_addr"], req_packet, False)
         return
 
     def _handle_list_request(self, files_str, ip_addr, hop_count):
         if(hop_count != 0 and ip_addr == self.ip_addr):
-            print('terminating')
             if(files_str != 'None'):
                 print('FILES AVAILABLE:')
                 files = json.loads(files_str)
@@ -475,26 +453,50 @@ class P2PServer(object):
             else:
                 print('No Files Found')
             return libp2puds.construct_empty_ok_res()
-        
-        select_query = "SELECT * FROM p2pdht"
-        cursor = self.dbconn.cursor()
-        cursor.execute(select_query)
-        data = cursor.fetchall()
+        data=self._get_local_keys()
         if(len(data) != 0):
             files = list()
             for datum in data:
                 files.append(datum[1])
             if(files_str != 'None'):
                 file_list = json.loads(files_str)
-                file_list.extend(files)
+                files.extend(file_list)
             files_str = json.dumps(files).replace(' ', '')
-
         hop_count += 1
         req_packet = libp2pproto.construct_req_packet(libp2pproto.LIST_FILES_OP_WORD, files_str, ip_addr, hop_count)
         self._send_p2p_tcp_packet(self.peer.successor['ip_addr'], req_packet, False)
         return libp2puds.construct_empty_ok_res()
 
+    def _get_local_keys(self):
+        select_query = "SELECT * FROM p2pdht"
+        cursor = self.dbconn.cursor()
+        cursor.execute(select_query)
+        data = cursor.fetchall()
+        return data
 
+    def _update_responsible_keys(self):
+        data = self._get_local_keys()
+        delete_query = "DELETE FROM p2pdht WHERE id=?"
+        cursor = self.dbconn.cursor()
+        if(data == None):
+            return
+        for datum in data:
+            filename = datum[1]
+            if(not self._check_filename_responsibility(filename)):
+                ip_addr_list = json.loads(datum[2])
+                for ip_addr in ip_addr_list:
+                    self._handle_put_request(filename, ip_addr, libp2pproto.REQUEST_MSG)
+                cursor.execute(delete_query, (datum[0],))
+                self.dbconn.commit()
+            continue
+
+    def _check_filename_responsibility(self, filename):
+        filename_hash = utils.generate_filename_hash(filename)
+        return ((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
+                #filehash is larger than all peers
+                or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
+                #filehash is smaller than all peers
+                or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id))
 
     def _setup_db(self):
         query = """

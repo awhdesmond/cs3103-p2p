@@ -38,7 +38,7 @@ def consistent_hash(string):
 
 
 def generate_filename_hash(filename):
-    return consistent_hash(filename)
+    return consistent_hash(filename.encode())
 
 
 def generate_peerid():
