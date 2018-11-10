@@ -25,19 +25,19 @@ class P2PDns(object):
 
     def _setup_db(self):
         query = """
-            CREATE TABLE IF NOT EXISTS p2pdns (id INTEGER PRIMARY KEY AUTOINCREMENT, peer_id TEXT, ip_address TEXT)
+            CREATE TABLE IF NOT EXISTS p2pdns (id INTEGER PRIMARY KEY AUTOINCREMENT, peer_id TEXT, ip_address TEXT, port TEXT)
         """
         cursor = self.dbconn.cursor()
         cursor.execute(query)
         self.dbconn.commit()
     
-    def _process_join(self, new_peerid, new_ipaddr):
+    def _process_join(self, new_peerid, new_ipaddr, new_port):
         # add newest peer into db
         insert_query = """
-            INSERT INTO p2pdns (peer_id, ip_address) VALUES (?, ?)
+            INSERT INTO p2pdns (peer_id, ip_address, port) VALUES (?, ?, ?)
         """
         cursor = self.dbconn.cursor()
-        cursor.execute(insert_query, (new_peerid, new_ipaddr))
+        cursor.execute(insert_query, (new_peerid, new_ipaddr, new_port))
         self.dbconn.commit()
         
         # give some peers back to new peer
@@ -45,14 +45,14 @@ class P2PDns(object):
             SELECT * FROM p2pdns WHERE peer_id<>? ORDER BY id LIMIT 5
         """
         cursor.execute(select_query, (new_peerid,))
-        return list(map(lambda row: "%d,%s,%s" % (row[0], row[1], row[2]), cursor.fetchall()))
+        return list(map(lambda row: "%d,%s,%s,%s" % (row[0], row[1], row[2], row[3]), cursor.fetchall()))
 
 
     def _process_req(self, req):
         op_word, arguments = req["op"], req["args"]
-        print("OP CODE: " + op_word + "\tPeer ID: " + arguments[0] + "\tIP Address: " + arguments[1])
+        print("OP CODE: " + op_word + "\tPeer ID: " + arguments[0] + "\tIP Address: " + arguments[1] + "\tPort: " + arguments[2])
         if op_word == libp2pdns.JOIN_REQ_OP_WORD:
-            res_data = self._process_join(arguments[0], arguments[1])
+            res_data = self._process_join(arguments[0], arguments[1], arguments[2])
             return libp2pdns.construct_res_packet(libp2pdns.OK_RES_CODE, libp2pdns.OK_RES_MSG, res_data)
         else:
             return libp2pdns.construct_unknown_res()

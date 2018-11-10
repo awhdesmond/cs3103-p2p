@@ -1,6 +1,7 @@
 import hashlib
 import datetime
 import socket
+import random
 from functools import reduce
 
 # PEERING CONSTANTS
@@ -55,3 +56,8 @@ def get_arguments(args, index, is_int=False):
         return None
     else:
         return int(args[index]) if is_int else args[index]
+
+
+def gen_tran_id():
+    a = ''.join(random.choice('0123456789ABCDEF') for _ in range(32))
+    return a

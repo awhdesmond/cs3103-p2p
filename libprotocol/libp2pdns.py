@@ -56,7 +56,8 @@ def parse_message_to_peer_list(string):
         for peer_index in range(1, len(peers) - 1): # to len(peers) - 1 here because of final \r\n in list
             peer_info = peers[peer_index].split(",")
             ip_addr = peer_info[2]
-            peer_list.append(ip_addr)
+            port = peer_info[3]
+            peer_list.append((ip_addr, port))
         return peer_list
 
     else:
