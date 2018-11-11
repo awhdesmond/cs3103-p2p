@@ -6,7 +6,8 @@
 import sys
 import os
 import socket
-import _thread
+import time
+import threading
 
 from peer import Peer
 from p2pserver import P2PServer
@@ -18,17 +19,18 @@ CLIENT_ROOT_PATH = "./p2pvar/"
 class P2PMain(object):
 
     def __init__(self, ip_addr):
-        self.peer = Peer()
-        self.p2p_server = P2PServer(self.peer, ip_addr)
-        self.p2p_client = P2PClient()
-
-    def _setup(self):
         # Create base directory to store files and chunks
         if not os.path.exists(CLIENT_ROOT_PATH):
             os.makedirs(CLIENT_ROOT_PATH)
 
-        self.p2p_server.setup()
-        _thread.start_new_thread(self.p2p_server.run, ())
+        self.p2p_server = P2PServer(ip_addr)
+        self.p2p_client = P2PClient()
+
+    def _setup(self):
+        t = threading.Thread(target=self.p2p_server.run)
+        t.start()        
+        
+        time.sleep(2)
         
         self.p2p_client.setup()
 

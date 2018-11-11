@@ -11,6 +11,7 @@ import socket
 import sqlite3
 
 from libprotocol import libp2pdns
+from libprotocol.libp2pdns import DnsRequestPacket, DnsResponsePacket 
 
 PORT = 7494
 DB_NAME = 'p2pdns.db'
@@ -49,30 +50,32 @@ class P2PDns(object):
 
 
     def _process_req(self, req):
-        op_word, arguments = req["op"], req["args"]
+        op_word, arguments = req.op_word, req.args
         print("OP CODE: " + op_word + "\tPeer ID: " + arguments[0] + "\tIP Address: " + arguments[1] + "\tPort: " + arguments[2])
+        
         if op_word == libp2pdns.JOIN_REQ_OP_WORD:
             res_data = self._process_join(arguments[0], arguments[1], arguments[2])
-            return libp2pdns.construct_res_packet(libp2pdns.OK_RES_CODE, libp2pdns.OK_RES_MSG, res_data)
+            return DnsResponsePacket(libp2pdns.OK_RES_CODE, libp2pdns.OK_RES_MSG, res_data)
         else:
             return libp2pdns.construct_unknown_res()
 
     def _service_connection(self, conn, addr):
         print("Connected by", addr)
+        
         data_string = ""
         while True:
             data = conn.recv(MAX_MSG_LEN)
             data_string = data_string + data.decode("utf-8")
             try:
-                req = libp2pdns.parse_string_to_req_packet(data_string)
-                res = self._process_req(req)
-                conn.sendall(res.encode())
+                req = DnsRequestPacket.parse(data_string) 
+                res_pkt = self._process_req(req)
+                conn.sendall(res_pkt.encode_bytes())
                 break
             except ValueError as err:
                 if int(str(err)) == libp2pdns.INCOMPLETE_PACKET_ERROR:
                     continue
                 else:
-                    conn.sendall(libp2pdns.construct_malformed_res().encode())
+                    conn.sendall(libp2pdns.construct_malformed_res().encode_bytes())
                     break
         conn.close()
 
@@ -89,3 +92,10 @@ class P2PDns(object):
 if __name__ == "__main__":
     p2pdns = P2PDns()
     p2pdns.run()
+
+
+    def handler(signum, frame):
+        print('Signal handler called with signal', signum)
+        p2pdns.server_socket.close()
+
+    signal.signal(signal.SIGINT, handler)

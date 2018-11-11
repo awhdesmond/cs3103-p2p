@@ -9,6 +9,7 @@ import os
 import socket
 
 from libprotocol import libp2puds
+from libprotocol.libp2puds import UdsResponsePacket
 
 # CONSTANTS
 CLIENT_UDS_PATH  = "./p2pvar/uds_socket"
@@ -20,24 +21,26 @@ class P2PClient(object):
     def _send_uds_request(self, packet):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(CLIENT_UDS_PATH)
-        sock.sendall(packet.encode())
+        sock.sendall(packet.encode_bytes())
+        
         data_string = ""
         while True:
             try:
                 data = sock.recv(MAX_PACKET_SIZE)
                 data_string = data_string + data.decode("utf-8")
-                print("-------", data_string)
-                return libp2puds.parse_string_to_res_packet(data_string)
+            
+                # print("-------", data_string)
+                res_pkt = UdsResponsePacket.parse(data_string)
+                sock.close()
+                return res_pkt
             except ValueError as err:
                 if int(str(err)) == libp2puds.INCOMPLETE_PACKET_ERROR:
                     continue
                 if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
                     raise err
-        sock.close()
-
+        
     def setup(self):
-        print("P2P Client Setup")
-
+        print("P2P CLIENT INITIALISING...")
         init_peer_table_req = libp2puds.construct_init_req()
 
         try:
@@ -46,35 +49,47 @@ class P2PClient(object):
             if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
                 exit(libp2puds.MALFORMED_PACKET_ERROR)
 
+
     def _render_user_menu(self):
         print("Group 14 P2P Client")
         print("-------------------")
         print("1. List available files.")
-        print("2. Search for a file.")
+        print("2. Share a file.")
         print("3. Download a file.")
-        print("4. Share a file.")
-        print("5. Quit")
+        print("4. Quit")
 
     def _process_user_option(self, user_option):
-    
         if user_option == "1":
             list_req = libp2puds.construct_list_files_req()
-            self._send_uds_request(list_req)
+            res_pkt = self._send_uds_request(list_req)
+            print(list(set(res_pkt.data)))
+
         elif user_option == "2":
-            filename = input('Enter filename: ')
-            search_req = libp2puds.construct_search_file_req(filename)
-            self._send_uds_request(search_req)
+            filepath = input('Enter filepath: ')
+            upload_req = libp2puds.construct_upload_file_req(os.path.basename(filepath))
+            res_pkt =  self._send_uds_request(upload_req)
+
+            if res_pkt.code == libp2puds.OK_RES_CODE:
+                print("File uploaded")
+            else:
+                print("An error occurred")
+
         elif user_option == "3":
             filename = input('Enter filename: ')
             download_req = libp2puds.construct_download_file_req(filename)
-            self._send_uds_request(download_req)
+            res_pkt =  self._send_uds_request(download_req)
+            
+            if res_pkt.code == libp2puds.OK_RES_CODE:
+                print(res_pkt.data)
+            else:
+                print("File not found")
+            
+
         elif user_option == "4":
-            filepath = input('Enter filepath: ')
-            # copy file from filepath to program root dir & seed
-            upload_req = libp2puds.construct_upload_file_req(os.path.basename(filepath))
-            self._send_uds_request(upload_req)
+            exit()            
         else:
             pass
+
 
     def run(self):
         while 1:

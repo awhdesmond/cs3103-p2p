@@ -2,35 +2,126 @@
 # ------------
 # DHT that relies on Chord lookup service
 
-from libchord import libchord
+import json
+import utils
+import sqlite3
+from libprotocol import libp2pproto
+from libprotocol.libp2pproto import P2PRequestPacket, send_p2p_tcp_packet
+
+PEER_PORT    = 7495
+DB_NAME      = './p2pvar/p2pdht.db'
+SELECT_QUERY = "SELECT * FROM p2pdht WHERE filename=?"
 
 class Dhash(object):
 
-    def __init__(self, peerid):
-        self.peerid = peerid
-        self.chord  = libchord.ChordService(peerid)
+    def __init__(self, peer):
+        self.peer = peer
+        self._setup_db()
 
-    def put(self, key, data):
-        # 1. Chord will look for correct node to store
-        # 2. Store the data in that node 
-        # (the target node will then duplicate the data in successor and predecessor)
+    def _setup_db(self):
+        query = """
+            CREATE TABLE IF NOT EXISTS p2pdht (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, ip_addr_list TEXT)
+        """
         
-        # target_node_id = self.chord.lookup(key)
+        dbconn = sqlite3.connect(DB_NAME)
+        cursor = dbconn.cursor()
+        cursor.execute(query)
+        dbconn.commit()
+        dbconn.close()
 
+    def put(self, filename, ip_addr_port):
+        if self._check_filename_responsibility(filename):
+            dbconn = sqlite3.connect(DB_NAME)
+            cursor = dbconn.cursor()
+            cursor.execute(SELECT_QUERY, (filename,))
+            db_result = cursor.fetchone()
 
-        pass
+            if db_result == None:
+                insert_query = """
+                    INSERT INTO p2pdht (filename, ip_addr_list) VALUES (?, ?)
+                """
+                cursor.execute(insert_query, (filename, json.dumps([ip_addr_port])))
+            else:
+                update_query = """
+                    UPDATE p2pdht SET ip_addr_list=? WHERE id=?
+                """
+                ip_addr_list = json.loads(db_result[2])
+                ip_addr_list.append(ip_addr_port)
+                cursor.execute(update_query, (json.dumps(ip_addr_list), int(db_result[0])))
+            dbconn.commit()
+            dbconn.close()
+            return True
+        else:
+            # Ask successor
+            req_packet = P2PRequestPacket(libp2pproto.PUT_FILE_OP_WORD, [filename, self.peer.ip_addr, self.peer.external_port])
+            res_packet = send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor['port'], req_packet)    
+            return res_packet.code == libp2pproto.OK_RES_CODE
+            
+    def get(self, filename):
+        dbconn = sqlite3.connect(DB_NAME)
+        cursor = dbconn.cursor()
+        cursor.execute(SELECT_QUERY, (filename,))
+        datum = cursor.fetchone()
+        dbconn.close()
 
-    def get(self, key):
-        # 1. Chord will look for correct node to retrieve
-        # 2. Retrieve data from the target node
-        pass
+        if datum == None:
+            if self._check_filename_responsibility(filename):
+                # If I am responsible and file is not found == ggwp
+                return None
+            else:
+                # Ask successor
+                req_packet = P2PRequestPacket(libp2pproto.GET_FILE_OP_WORD, [filename])
+                res_packet = send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor['port'], req_packet)
+                
+                if len(res_packet.data) > 0:
+                    return res_packet.data[0]
+                else:
+                    return None
+                    
+                return None
+        else:
+            ip_addr_port_str = datum[2].replace(' ', '')
+            return json.loads(ip_addr_port_str)[0]
+            
 
-    def handle_put_request(self, key, data):
-        # 1. Store the data in ownself
-        # 2. Send put request to own successor and predecessor
-        pass
+    # Returns only the filename
+    def get_local_keys(self):
+        data = self._get_local_rows()
+        return [d[1] for d in data]
 
-    def handle_get_request(self, key):
-        # 1. Retrieve the data. 
-        # 1.1 If data not available then return NOT FOUND
-        pass
+    # Returns everything
+    def _get_local_rows(self):
+        select_query = """
+            SELECT * FROM p2pdht
+        """
+        
+        dbconn = sqlite3.connect(DB_NAME)
+        cursor =dbconn.cursor()
+        cursor.execute(select_query)
+        data = cursor.fetchall()
+        dbconn.close()
+        return data
+
+    def _check_filename_responsibility(self, filename):
+        if not self.peer.successor['id']:
+            return True
+
+        filename_hash = utils.generate_filename_hash(filename)
+        return ((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
+                #filehash is larger than all peers
+                or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
+                #filehash is smaller than all peers
+                or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id))
+
+    def update_responsible_keys(self):
+        data = self._get_local_rows()
+        
+        if(data == None):
+            return
+        
+        for datum in data:
+            filename = datum[1]
+            if not self._check_filename_responsibility(filename):
+                ip_addr_port_list = json.loads(datum[2])
+                for ip_addr_port in ip_addr_port_list:
+                    self.put(filename, ip_addr_port)
