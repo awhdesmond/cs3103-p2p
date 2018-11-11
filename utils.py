@@ -43,12 +43,25 @@ def generate_peerid():
 ##
 ## File Handling
 ##
+def remove_chunk_suffix(filename):
+    if "-cs3103-chunk" in filename:
+        suffix_idx = filename.index("-cs3103-chunk")
+        return filename[0: suffix_idx]
+    return filename
+
+def get_chunk_number_from_filename(filename):
+    if "-cs3103-chunk" in filename:
+        suffix_idx = filename.index("-cs3103-chunk")
+        return int(filename[suffix_idx + len("-cs3103-chunk"):])
+    else:
+        return -1
+
 def generate_chunks_filename(filename):
     return [(filename + "-cs3103-chunk%d" % i) for i in range(0, N_CHUNKS)]
 
 def get_file_chunk_byte(filename, chunk):
-    file = open(filename, 'rb')
-    data = file.read()
+    f = open("./p2pvar/" + filename, 'rb')
+    data = f.read()
     
     chunk_size = len(data) / 10
     if chunk_size < 1:
@@ -62,9 +75,9 @@ def get_file_chunk_byte(filename, chunk):
         return data[chunk * chunk_size: chunk * chunk_size + chunk_size]
     else:
         return data[chunk * chunk_size:]
-
-
-
+##
+## MISC
+##
 def remove_empty_string_from_arr(arr):
     return list(filter(lambda x: x != '', arr))
 

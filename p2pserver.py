@@ -11,6 +11,7 @@ import utils
 import json
 
 import threading
+from utils import generate_chunks_filename, get_file_chunk_byte, remove_chunk_suffix, get_chunk_number_from_filename
 
 from peer import Peer
 
@@ -78,7 +79,6 @@ class P2PServer(object):
         peer_server_sock.bind(('', PEER_PORT))
         peer_server_sock.listen()
         
-        print("Waiting")
         while True:
             conn, addr = peer_server_sock.accept()
             conn_thread = threading.Thread(target=self._handle_p2p_connection, args=(conn,))
@@ -185,18 +185,38 @@ class P2PServer(object):
 
     def _handle_upload_file_request(self, filename):
         ip_addr_port = self.ip_addr + ':' + str(self.external_port)
-        success = self.dhash.put(filename, ip_addr_port)
+        
+        for chunk_name in generate_chunks_filename(filename):
+            print("Uploading:", chunk_name)
+            success = self.dhash.put(chunk_name, ip_addr_port)
+
         return libp2puds.construct_empty_ok_res()
 
     def _handle_download_file_request(self, filename):
-        ip_addr_port = self.dhash.get(filename)
-        print(ip_addr_port)
+        overall_bytes = b""
 
-        if ip_addr_port == None:
-            return libp2puds.construct_unknown_res()
-        else:
-            # TODO: DOWNLOAD THE FILE
-            return UdsResponsePacket(libp2puds.OK_RES_CODE, libp2puds.OK_RES_MSG, [ip_addr_port])
+        for chunk_name in generate_chunks_filename(filename):
+            ip_addr_port = self.dhash.get(chunk_name)
+        
+            if ip_addr_port == None:
+                return libp2puds.construct_unknown_res()
+            else:
+                ip_addr, port = ip_addr_port.split(":")[0], int(ip_addr_port.split(":")[1])
+                print("Download source of %s is: %s" % (chunk_name, ip_addr_port))
+
+                if ip_addr == self.ip_addr:
+                    real_filename = remove_chunk_suffix(chunk_name)
+                    chunk_number = get_chunk_number_from_filename(chunk_name)
+                    byte_data = get_file_chunk_byte(real_filename, chunk_number)
+                    overall_bytes = overall_bytes + byte_data
+                else:
+                    req_packet = P2PRequestPacket(libp2pproto.DOWNLOAD_FILE_OP_WORD, [chunk_name])
+                    res_pkt = send_p2p_tcp_packet(self.peer.successor['ip_addr'], self.peer.successor['port'], req_packet)
+                    
+                    if len(res_pkt.data) > 0:
+                        overall_bytes = overall_bytes + res_pkt.data[0].encode()
+    
+        return UdsResponsePacket(libp2puds.OK_RES_CODE, libp2puds.OK_RES_MSG, [overall_bytes.decode()])
     
     def _handle_list_files_request(self):
         data = self.dhash.get_local_keys()
@@ -204,6 +224,8 @@ class P2PServer(object):
             req_packet = P2PRequestPacket(libp2pproto.LIST_FILES_OP_WORD, [self.ip_addr])
             res_pkt = send_p2p_tcp_packet(self.peer.successor['ip_addr'], self.peer.successor['port'], req_packet)
             data = res_pkt.data + self.dhash.get_local_keys()
+        
+        data = [remove_chunk_suffix(f) for f in data] 
         return UdsResponsePacket(libp2puds.OK_RES_CODE, libp2puds.OK_RES_MSG, data)
     
     ##
@@ -236,9 +258,8 @@ class P2PServer(object):
 
         if op_word == libp2pproto.PUT_FILE_OP_WORD:
             filename = args[libp2pproto.PUT_FILE_FILENAME_INDEX]
-            ip_addr = args[libp2pproto.PUT_FILE_IP_ADDR_INDEX]
-            port = int(args[libp2pproto.PUT_FILE_PORT_INDEX])
-            return self._handle_p2p_put_request(filename, ip_addr, port)
+            ip_addr_port = args[libp2pproto.PUT_FILE_IP_ADDR_PORT_INDEX]
+            return self._handle_p2p_put_request(filename, ip_addr_port)
 
         if op_word == libp2pproto.GET_FILE_OP_WORD:
             filename = args[libp2pproto.GET_FILE_FILENAME_INDEX]
@@ -247,6 +268,10 @@ class P2PServer(object):
         if op_word == libp2pproto.LIST_FILES_OP_WORD:
             ip_addr = args[libp2pproto.LIST_FILES_IP_ADDR_INDEX]
             return self._handle_p2p_list_request(ip_addr)
+
+        if op_word == libp2pproto.DOWNLOAD_FILE_OP_WORD:
+            filename = args[libp2pproto.DOWNLOAD_FILE_FILENAME_INDEX]
+            return self._handle_p2p_download_request(filename)
 
         return libp2pproto.construct_unknown_res()
     
@@ -275,10 +300,8 @@ class P2PServer(object):
         data = "%d %s %s" % (self.peer.predecessor["id"], self.peer.predecessor["ip_addr"], self.peer.predecessor["port"])
         return P2PResponsePacket(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
 
-    def _handle_p2p_put_request(self, filename, ip_addr, external_port):
-        ip_addr_port = ip_addr + ':' + str(external_port)
+    def _handle_p2p_put_request(self, filename, ip_addr_port):
         success = self.dhash.put(filename, ip_addr_port)
-
         if success:
             return libp2pproto.construct_empty_ok_res()
         else:
@@ -286,7 +309,6 @@ class P2PServer(object):
 
     def _handle_p2p_get_request(self, filename):
         ip_addr_port = self.dhash.get(filename)
-        print(ip_addr_port)
         if ip_addr_port == None:
             return libp2pproto.construct_fnf_res()
         else:
@@ -301,6 +323,14 @@ class P2PServer(object):
 
         successor_data = successor_data + self.dhash.get_local_keys()
         return P2PResponsePacket(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, successor_data)
+
+
+    def _handle_p2p_download_request(self, filename):
+        real_filename = remove_chunk_suffix(filename)
+        chunk_number = get_chunk_number_from_filename(filename)
+        byte_data = get_file_chunk_byte(real_filename, chunk_number)
+        return P2PResponsePacket(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [byte_data.decode()])
+
 
     ##
     ## STUN

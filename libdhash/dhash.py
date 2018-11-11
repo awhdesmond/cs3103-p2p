@@ -53,7 +53,7 @@ class Dhash(object):
             return True
         else:
             # Ask successor
-            req_packet = P2PRequestPacket(libp2pproto.PUT_FILE_OP_WORD, [filename, self.peer.ip_addr, self.peer.external_port])
+            req_packet = P2PRequestPacket(libp2pproto.PUT_FILE_OP_WORD, [filename, ip_addr_port])
             res_packet = send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor['port'], req_packet)    
             return res_packet.code == libp2pproto.OK_RES_CODE
             
@@ -105,12 +105,15 @@ class Dhash(object):
     def _check_filename_responsibility(self, filename):
         if not self.peer.successor['id']:
             return True
-
+        
         filename_hash = utils.generate_filename_hash(filename)
+        print(filename_hash)
+        self.peer.print_info()
+
         return ((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
-                #filehash is larger than all peers
-                or (self.peer.peer_id > self.peer.successor['id'] and filename_hash> self.peer.peer_id)
-                #filehash is smaller than all peers
+                # 60 - F(70) - 2
+                or (filename_hash > self.peer.predecessor['id'] and self.peer.peer_id < self.peer.predecessor['id'])
+                # filehash is smaller than all peers
                 or (self.peer.peer_id < self.peer.predecessor['id'] and filename_hash < self.peer.peer_id))
 
     def update_responsible_keys(self):

@@ -7,6 +7,7 @@
 
 import os
 import socket
+import sys
 
 from libprotocol import libp2puds
 from libprotocol.libp2puds import UdsResponsePacket
@@ -80,13 +81,14 @@ class P2PClient(object):
             res_pkt =  self._send_uds_request(download_req)
             
             if res_pkt.code == libp2puds.OK_RES_CODE:
-                print(res_pkt.data)
+                file_data = res_pkt.data[0].encode()
+                with open(CLIENT_ROOT_PATH + filename, "wb") as file:
+                    file.write(file_data)
+                print("File downloaded!")
             else:
                 print("File not found")
-            
-
         elif user_option == "4":
-            exit()            
+            sys.exit()            
         else:
             pass
 
