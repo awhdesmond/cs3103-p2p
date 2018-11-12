@@ -28,7 +28,7 @@ from libprotocol.libp2pdns import DnsRequestPacket, DnsResponsePacket
 CLIENT_UDS_PATH = "./p2pvar/uds_socket"
 CLIENT_ROOT_PATH = "./p2pvar/"
 
-DNS_IP_ADDR = "10.0.1.4"
+DNS_IP_ADDR = "13.67.33.180"
 DNS_PORT = 7494
 PEER_PORT = 7495
 
