@@ -104,6 +104,14 @@ class Chord(object):
                     inform_packet = P2PRequestPacket(libp2pproto.INFORM_SUCCESSOR_OP_WORD, [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port])
                     send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor["port"], inform_packet)
 
+                    # Inform predecessor of new next successor
+                    inform_packet = P2PRequestPacket(libp2pproto.INFORM_PREDECESSOR_OP_WORD,
+                                                     [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port,
+                                                      self.peer.successor["id"], self.peer.successor["ip_addr"],
+                                                      self.peer.successor["port"]])
+                    send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], self.peer.predecessor["port"],
+                                        inform_packet)
+
                 # Ensure that there's 3 nodes in the network.
                 # If there's 2 node, then the successor's successor will be the current node
                 elif successor_successor_peer_id != self.peer.peer_id:
@@ -112,6 +120,7 @@ class Chord(object):
                         self.peer.next_successor["id"] = int(data[3])
                         self.peer.next_successor["ip_addr"] = data[4]
                         self.peer.next_successor["port"] = int(data[5])
+
                 else:
                     self.peer.next_successor["id"] = None
                     self.peer.next_successor["ip_addr"] = None
