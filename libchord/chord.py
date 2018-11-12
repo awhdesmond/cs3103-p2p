@@ -90,19 +90,23 @@ class Chord(object):
             if res_packet is not None:
                 data = res_packet.data[0].split(" ")
                 successor_predecessor_peer_id = int(data[0])
+                successor_successor_peer_id = int(data[3])
 
                 if successor_predecessor_peer_id != self.peer.peer_id:
                     # Oh, you have a new predecessor, let me add that as my successor
+                    self.peer.next_successor["id"] = self.peer.successor["id"]
+                    self.peer.next_successor["ip_addr"] = self.peer.successor["ip_addr"]
+                    self.peer.next_successor["port"] = self.peer.successor["port"]
                     self.peer.successor["id"]        = int(data[0])
                     self.peer.successor["ip_addr"]   = data[1]
                     self.peer.successor["port"] = int(data[2])
+                    # Inform successor of new predecessor
                     inform_packet = P2PRequestPacket(libp2pproto.INFORM_SUCCESSOR_OP_WORD, [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port])
                     send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor["port"], inform_packet)
 
-                successor_successor_peer_id = int(data[3])
                 # Ensure that there's 3 nodes in the network.
                 # If there's 2 node, then the successor's successor will be the current node
-                if successor_successor_peer_id != self.peer.peer_id:
+                elif successor_successor_peer_id != self.peer.peer_id:
                     if successor_successor_peer_id != self.peer.next_successor["id"]:
                         # You have a new successor, let me add that as my next successor
                         self.peer.next_successor["id"] = int(data[3])
