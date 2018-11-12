@@ -130,7 +130,7 @@ class Chord(object):
                     print("Informing my predecessor to add me as its successor and my successor as its next successor")
                     inform_packet = P2PRequestPacket(libp2pproto.INFORM_PREDECESSOR_OP_WORD,
                                                      [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port,
-                                                      self.peer.successor["id"], self.peer.uccessor["ip_addr"],
+                                                      self.peer.successor["id"], self.peer.successor["ip_addr"],
                                                       self.peer.successor["port"]])
 
                     send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], self.peer.predecessor["port"], inform_packet)
