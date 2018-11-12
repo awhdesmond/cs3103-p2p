@@ -14,18 +14,22 @@ class Peer(object):
         self.external_port = external_port
         self.successor     = {"id": None, "ip_addr": None, "port": None}
         self.predecessor   = {"id": None, "ip_addr": None, "port": None}
+        self.next_successor = {"id": None, "ip_addr": None, "port": None}
 
-        # self.next_successor = {"id": None, "ip_addr": None}
         print("My peer_id is: %d" % (self.peer_id,))
 
     def print_info(self):
         print("Peer Information:")
         print("Peer Id:", self.peer_id)
-        
-        print("Successor id:", self.successor["id"])
-        print("Successor ip address:", self.successor["ip_addr"])
-        print("Successor port:", self.successor["port"])
-        
+
         print("Predecessor id:", self.predecessor["id"])
         print("Predecessor ip address:", self.predecessor["ip_addr"])
         print("Predecessor port:", self.predecessor["port"])
+
+        print("Successor id:", self.successor["id"])
+        print("Successor ip address:", self.successor["ip_addr"])
+        print("Successor port:", self.successor["port"])
+
+        print("Next Successor id:", self.next_successor["id"])
+        print("Next Successor ip address:", self.next_successor["ip_addr"])
+        print("Next Successor port:", self.next_successor["port"])

@@ -110,7 +110,7 @@ class P2PServer(object):
             except ValueError as err:
                 if int(str(err)) == libp2puds.MALFORMED_PACKET_ERROR:
                     malform_res = libp2puds.construct_malformed_res()
-                    socket.sendall(malform_res.encode_bytes())
+                    conn.sendall(malform_res.encode_bytes())
                 
 
     def _handle_p2p_connection(self, socket):
@@ -161,18 +161,17 @@ class P2PServer(object):
         # TODO: handle case if DNS is not up.
         dns_client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         dns_client_sock.connect((DNS_IP_ADDR, DNS_PORT))
-
         message = DnsRequestPacket(libp2pdns.JOIN_REQ_OP_WORD, [self.peer.peer_id, self.ip_addr, self.external_port])
         dns_client_sock.sendall(message.encode_bytes())
-        
+
         data_string = ""
         while True:
             try:
                 data = dns_client_sock.recv(MAX_PACKET_SIZE)
                 data_string = data_string + data.decode("utf-8")
-            
+
                 # print("-------", data_string)
-                peers_ip_addr_port_list = libp2pdns.parse_message_to_peer_list(data_string)                
+                peers_ip_addr_port_list = libp2pdns.parse_message_to_peer_list(data_string)
                 dns_client_sock.close()
                 return peers_ip_addr_port_list
             except ValueError as err:
@@ -180,8 +179,8 @@ class P2PServer(object):
                     continue
 
     def _enter_p2p_network(self):
-        peer_ip_port = self._retrieve_peer_ip_port()
-        self.chord.enter_p2p_network(peer_ip_port)
+        peers_ip_port_list = self._retrieve_peer_ip_port()
+        self.chord.enter_p2p_network(peers_ip_port_list)
 
     def _handle_upload_file_request(self, filename):
         ip_addr_port = self.ip_addr + ':' + str(self.external_port)
@@ -238,23 +237,39 @@ class P2PServer(object):
         if op_word == libp2pproto.GET_NEIGHBOURS_OP_WORD:
             peer_id = int(args[libp2pproto.GET_NEIGHBOURS_PEER_ID_INDEX])
             ip_addr = args[libp2pproto.GET_NEIGHBOURS_PEER_IP_ADDR_INDEX]
-            port = args[libp2pproto.GET_NEIGHBOURS_PEER_PORT_INDEX]
+            port = int(args[libp2pproto.GET_NEIGHBOURS_PEER_PORT_INDEX])
             return self._handle_p2p_get_neighbors(peer_id, ip_addr, port)
-        
+
+        if op_word == libp2pproto.INFORM_PREDECESSOR_PREDECESSOR_OP_WORD:
+            peer_id = int(args[libp2pproto.INFORM_PREDECESSOR_PEER_ID_INDEX])
+            ip_addr = args[libp2pproto.INFORM_PREDECESSOR_PEER_IP_ADDR_INDEX]
+            port = int(args[libp2pproto.INFORM_PREDECESSOR_PEER_PORT_INDEX])
+
+            inform_packet = P2PRequestPacket(libp2pproto.INFORM_PREDECESSOR_OP_WORD,
+                                             [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port,
+                                              peer_id, ip_addr, port])
+            return send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], self.peer.predecessor["port"], inform_packet)
+
         if op_word == libp2pproto.INFORM_PREDECESSOR_OP_WORD:
             peer_id = int(args[libp2pproto.INFORM_PREDECESSOR_PEER_ID_INDEX])
             ip_addr = args[libp2pproto.INFORM_PREDECESSOR_PEER_IP_ADDR_INDEX]
-            port = args[libp2pproto.INFORM_PREDECESSOR_PEER_PORT_INDEX]
-            return self._handle_p2p_inform_predecessor(peer_id, ip_addr, port)
+            port = int(args[libp2pproto.INFORM_PREDECESSOR_PEER_PORT_INDEX])
+
+            next_successor_peer_id = int(args[libp2pproto.INFORM_PREDECESSOR_SUCCESSOR_PEER_ID_INDEX])
+            next_successor_ip_addr = args[libp2pproto.INFORM_PREDECESSOR_SUCCESSOR_PEER_IP_ADDR_INDEX]
+            next_successor_port = int(args[libp2pproto.INFORM_PREDECESSOR_SUCCESSOR_PEER_PORT_INDEX])
+
+            return self._handle_p2p_inform_predecessor(peer_id, ip_addr, port,
+                                                       next_successor_peer_id, next_successor_ip_addr, next_successor_port)
 
         if op_word == libp2pproto.INFORM_SUCCESSOR_OP_WORD:
             peer_id = int(args[libp2pproto.INFORM_SUCCESSOR_PEER_ID_INDEX])
             ip_addr = args[libp2pproto.INFORM_SUCCESSOR_PEER_IP_ADDR_INDEX]
-            port = args[libp2pproto.INFORM_SUCCESSOR_PEER_PORT_INDEX]
+            port = int(args[libp2pproto.INFORM_SUCCESSOR_PEER_PORT_INDEX])
             return self._handle_p2p_inform_successor(peer_id, ip_addr, port)
 
-        if op_word == libp2pproto.QUERY_SUCCESSOR_FOR_PREDECESSOR_OP_WORD:
-            return self._handle_p2p_query_successor_for_predecessor()
+        if op_word == libp2pproto.QUERY_SUCCESSOR_FOR_NEIGHBOURS_OP_WORD:
+            return self._handle_p2p_query_successor_for_neighbours()
 
         if op_word == libp2pproto.PUT_FILE_OP_WORD:
             filename = args[libp2pproto.PUT_FILE_FILENAME_INDEX]
@@ -278,12 +293,23 @@ class P2PServer(object):
 
     def _handle_p2p_get_neighbors(self, new_peer_id, new_peer_ip_address, new_peer_port):
         data = self.chord.get_neighbours(new_peer_id, new_peer_ip_address, new_peer_port)
+        print("GET NEIGHBOURS: ", data)
         return P2PResponsePacket(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
 
-    def _handle_p2p_inform_predecessor(self, peer_id, ip_addr, port):
+    def _handle_p2p_inform_predecessor(self, peer_id, ip_addr, port,
+                                       next_successor_peer_id, next_successor_ip_addr, next_successor_port):
         self.peer.successor["id"]      = peer_id
         self.peer.successor["ip_addr"] = ip_addr
         self.peer.successor["port"] = port
+
+        # ignore case where only 2 nodes in the network
+        if self.peer.peer_id == next_successor_peer_id:
+            pass
+        else:
+            self.peer.next_successor["id"] = next_successor_peer_id
+            self.peer.next_successor["ip_addr"] = next_successor_ip_addr
+            self.peer.next_successor["port"] = next_successor_port
+
         self.dhash.update_responsible_keys()
         
         return libp2pproto.construct_empty_ok_res()
@@ -296,8 +322,11 @@ class P2PServer(object):
         
         return libp2pproto.construct_empty_ok_res()
 
-    def _handle_p2p_query_successor_for_predecessor(self):
-        data = "%d %s %s" % (self.peer.predecessor["id"], self.peer.predecessor["ip_addr"], self.peer.predecessor["port"])
+    def _handle_p2p_query_successor_for_neighbours(self):
+        data = "%d %s %s %d %s %s" % \
+               (self.peer.predecessor["id"], self.peer.predecessor["ip_addr"], self.peer.predecessor["port"],
+                self.peer.successor["id"], self.peer.successor["ip_addr"], self.peer.successor["port"])
+
         return P2PResponsePacket(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
 
     def _handle_p2p_put_request(self, filename, ip_addr_port):

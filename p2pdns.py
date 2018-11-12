@@ -48,6 +48,14 @@ class P2PDns(object):
         cursor.execute(select_query, (new_peerid,))
         return list(map(lambda row: "%d,%s,%s,%s" % (row[0], row[1], row[2], row[3]), cursor.fetchall()))
 
+    def _process_remove(self, cur_peerid):
+        delete_query = """
+            DELETE FROM p2pdns WHERE peer_id = ?
+        """
+        cursor = self.dbconn.cursor()
+        cursor.execute(delete_query, (cur_peerid,))
+        self.dbconn.commit()
+
 
     def _process_req(self, req):
         op_word, arguments = req.op_word, req.args
@@ -56,6 +64,9 @@ class P2PDns(object):
         if op_word == libp2pdns.JOIN_REQ_OP_WORD:
             res_data = self._process_join(arguments[0], arguments[1], arguments[2])
             return DnsResponsePacket(libp2pdns.OK_RES_CODE, libp2pdns.OK_RES_MSG, res_data)
+        elif op_word == libp2pdns.DELETE_ENTRY_OP_WORD:
+            self._process_remove(arguments[0])
+            return DnsResponsePacket(libp2pdns.OK_RES_CODE, libp2pdns.OK_RES_MSG, [])
         else:
             return libp2pdns.construct_unknown_res()
 

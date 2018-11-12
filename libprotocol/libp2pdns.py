@@ -1,7 +1,15 @@
+import utils
+import socket
+
+
+DNS_IP_ADDR = "192.168.2.170"
+DNS_PORT = 7494
+
 MALFORMED_PACKET_ERROR  = 1
 INCOMPLETE_PACKET_ERROR = 2
 
 JOIN_REQ_OP_WORD = "JOIN"
+DELETE_ENTRY_OP_WORD = "DELETE"
 
 OK_RES_CODE = 200
 OK_RES_MSG  = "OK"
@@ -47,7 +55,7 @@ class DnsResponsePacket(object):
         if DnsResponsePacket.delimeter in string:
             status_line = string.split(DnsResponsePacket.delimeter)[0] 
             status_tokens = status_line.split(" ")
-            if len(status_tokens) < 3: # CHECK MALFORM STATUS LINE
+            if len(status_tokens) < 3: # CHECK MALFORMED STATUS LINE
                 raise ValueError(MALFORMED_PACKET_ERROR)
             
             datalines = utils.remove_empty_string_from_arr(string.split(DnsResponsePacket.delimeter)[1:])
@@ -57,7 +65,7 @@ class DnsResponsePacket(object):
                 code = int(status_tokens[0])
                 msg = status_tokens[1:-1]
                 data = list(map(lambda x: x.strip(), datalines))
-                return  DnsResponsePacket(code, msg, data)
+                return DnsResponsePacket(code, msg, data)
             elif len(datalines) < num_data_bytes: 
                 ## still got more to receive
                 raise ValueError(INCOMPLETE_PACKET_ERROR)
@@ -101,10 +109,33 @@ def parse_message_to_peer_list(string):
         
         for peer_index in range(1, len(peers) - 1): # to len(peers) - 1 here because of final \r\n in list
             peer_info = peers[peer_index].split(",")
+            peer_id = peer_info[1]
             ip_addr = peer_info[2]
             port = peer_info[3]
-            peer_list.append((ip_addr, port))
+            peer_list.append([peer_id, ip_addr, port])
         return peer_list
 
     else:
         raise ValueError(INCOMPLETE_PACKET_ERROR)
+
+
+def send_dns_remove_entry(peerid):
+    packet = DnsRequestPacket(DELETE_ENTRY_OP_WORD, [peerid])
+    dns_client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    dns_client_sock.connect((DNS_IP_ADDR, DNS_PORT))
+    dns_client_sock.sendall(packet.encode_bytes())
+    data_string = ""
+    while True:
+        try:
+            data = dns_client_sock.recv(1024)
+            data_string = data_string + data.decode("utf-8")
+
+            # print("-------", data_string)
+            res_pkt = DnsResponsePacket.parse(data_string)
+            dns_client_sock.close()
+            return res_pkt
+        except ValueError as err:
+            if int(str(err)) == INCOMPLETE_PACKET_ERROR:
+                continue
+            if int(str(err)) == MALFORMED_PACKET_ERROR:
+                raise err

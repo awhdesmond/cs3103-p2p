@@ -119,7 +119,7 @@ class Dhash(object):
     def update_responsible_keys(self):
         data = self._get_local_rows()
         
-        if(data == None):
+        if data is None:
             return
         
         for datum in data:
