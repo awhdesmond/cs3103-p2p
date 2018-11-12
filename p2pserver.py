@@ -42,15 +42,12 @@ STUN_MAPPED_ADDR_CODE = '0001'
 
 class P2PServer(object):
     
-    def __init__(self, ip_addr, dns_ip_addr):
-        self.ip_addr       = ip_addr
-        self.external_port = PEER_PORT
+    def __init__(self, dns_ip_addr):
         self.dns_ip_addr = dns_ip_addr
 
         external_ip, external_port = self._retrieve_public_ip_stun()
-        # TODO: UNCOMMENT THIS WHEN NAT IS NOT SYMMETRIC
-        # self.ip_addr = external_ip
-        # self.external_port = external_port
+        self.ip_addr = external_ip
+        self.external_port = external_port
 
         self.peer  = Peer(self.ip_addr, self.external_port) 
         self.chord = Chord(self.peer)
