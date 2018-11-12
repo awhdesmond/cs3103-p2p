@@ -142,6 +142,10 @@ class Chord(object):
 
                     self._stabilisation()
                 else:
+                    self.peer.predecessor["id"] = None
+                    self.peer.predecessor["ip_addr"] = None
+                    self.peer.predecessor["port"] = None
+
                     self.peer.successor["id"] = None
                     self.peer.successor["ip_addr"] = None
                     self.peer.successor["port"] = None
