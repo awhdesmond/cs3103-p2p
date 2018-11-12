@@ -8,6 +8,7 @@
 import os
 import socket
 import sys
+import shutil
 
 from libprotocol import libp2puds
 from libprotocol.libp2puds import UdsResponsePacket
@@ -57,7 +58,8 @@ class P2PClient(object):
         print("1. List available files.")
         print("2. Share a file.")
         print("3. Download a file.")
-        print("4. Quit")
+        print("4. Search for a file.")
+        print("5. Quit")
 
     def _process_user_option(self, user_option):
         if user_option == "1":
@@ -67,6 +69,7 @@ class P2PClient(object):
 
         elif user_option == "2":
             filepath = input('Enter filepath: ')
+            shutil.copy(filepath, CLIENT_ROOT_PATH + os.path.basename(filepath))
             upload_req = libp2puds.construct_upload_file_req(os.path.basename(filepath))
             res_pkt =  self._send_uds_request(upload_req)
 
@@ -87,7 +90,17 @@ class P2PClient(object):
                 print("File downloaded!")
             else:
                 print("File not found")
+
         elif user_option == "4":
+            filename = input('Enter filename: ')
+            list_req = libp2puds.construct_list_files_req()
+            res_pkt = self._send_uds_request(list_req)
+            if(filename in res_pkt.data):
+                print('%s exists' % filename)
+            else:
+                print('%s not found' % filename)
+
+        elif user_option == "5":
             sys.exit()            
         else:
             pass
@@ -97,6 +110,6 @@ class P2PClient(object):
         while 1:
             self._render_user_menu()
             user_option = input('Enter option: ')
-            while user_option not in ["1", "2", "3", "4"]:
+            while user_option not in ["1", "2", "3", "4", "5"]:
                 user_option = input('Invalid option selected. Please try again: ')
             self._process_user_option(user_option)
