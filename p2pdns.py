@@ -4,7 +4,7 @@
 # to new peers who want to join
 # 
 # Sqlite3 DB Format -- <id, peer-id, ip-address>
-
+import signal
 import sys
 import os
 import socket
