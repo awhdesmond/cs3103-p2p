@@ -177,8 +177,6 @@ def send_p2p_tcp_packet(dst_ip_addr, dst_port, packet):
         try:
             data = tcp_socket.recv(1024)
             data_string = data_string + data.decode("utf-8")
-            
-            # print("-------", data_string)
             res_pkt = P2PResponsePacket.parse(data_string)
             tcp_socket.close()
             return res_pkt

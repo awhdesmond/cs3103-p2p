@@ -71,8 +71,6 @@ class P2PDns(object):
             return libp2pdns.construct_unknown_res()
 
     def _service_connection(self, conn, addr):
-        # print("Connected by", addr)
-        
         data_string = ""
         while True:
             data = conn.recv(MAX_MSG_LEN)
