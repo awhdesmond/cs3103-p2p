@@ -28,7 +28,7 @@ from libprotocol.libp2pdns import DnsRequestPacket, DnsResponsePacket
 CLIENT_UDS_PATH = "./p2pvar/uds_socket"
 CLIENT_ROOT_PATH = "./p2pvar/"
 
-DNS_IP_ADDR = "13.67.33.180"
+# DNS_IP_ADDR = "13.67.33.180"
 DNS_PORT = 7494
 PEER_PORT = 7495
 
@@ -178,7 +178,7 @@ class P2PServer(object):
 
     def _enter_p2p_network(self):
         peers_ip_port_list = self._retrieve_peer_ip_port()
-        self.chord.enter_p2p_network(peers_ip_port_list)
+        self.chord.enter_p2p_network(peers_ip_port_list, self.dns_ip_addr)
 
     def _handle_upload_file_request(self, filename):
         ip_addr_port = self.ip_addr + ':' + str(self.external_port)

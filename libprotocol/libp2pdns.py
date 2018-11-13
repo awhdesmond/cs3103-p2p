@@ -2,7 +2,6 @@ import utils
 import socket
 
 
-DNS_IP_ADDR = "192.168.2.170"
 DNS_PORT = 7494
 
 MALFORMED_PACKET_ERROR  = 1
@@ -119,10 +118,10 @@ def parse_message_to_peer_list(string):
         raise ValueError(INCOMPLETE_PACKET_ERROR)
 
 
-def send_dns_remove_entry(peerid):
+def send_dns_remove_entry(peerid, dns_ip_addr):
     packet = DnsRequestPacket(DELETE_ENTRY_OP_WORD, [peerid])
     dns_client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    dns_client_sock.connect((DNS_IP_ADDR, DNS_PORT))
+    dns_client_sock.connect((dns_ip_addr, DNS_PORT))
     dns_client_sock.sendall(packet.encode_bytes())
     data_string = ""
     while True:

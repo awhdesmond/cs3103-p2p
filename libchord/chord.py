@@ -17,7 +17,7 @@ class Chord(object):
         self.peer = peer
         self.scheduler = BackgroundScheduler()
 
-    def enter_p2p_network(self, peers_ip_port_list):
+    def enter_p2p_network(self, peers_ip_port_list, dns_ip_addr):
         if len(peers_ip_port_list) == 0:
             # First node has no peers
             pass
@@ -64,9 +64,9 @@ class Chord(object):
             # Handle when node has left the network
             except socket.error as e:
                 if e.errno == 111:
-                    libp2pdns.send_dns_remove_entry(peer_id)
+                    libp2pdns.send_dns_remove_entry(peer_id, dns_ip_addr)
                     del peers_ip_port_list[rand_index]
-                    self.enter_p2p_network(peers_ip_port_list)
+                    self.enter_p2p_network(peers_ip_port_list, dns_ip_addr)
                 else:
                     raise e.strerror
 
