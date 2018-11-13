@@ -291,7 +291,7 @@ class P2PServer(object):
 
     def _handle_p2p_get_neighbors(self, new_peer_id, new_peer_ip_address, new_peer_port):
         data = self.chord.get_neighbours(new_peer_id, new_peer_ip_address, new_peer_port)
-        print("GET NEIGHBOURS: ", data)
+        # print("GET NEIGHBOURS: ", data)
         return P2PResponsePacket(libp2pproto.OK_RES_CODE, libp2pproto.OK_RES_MSG, [data])
 
     def _handle_p2p_inform_predecessor(self, peer_id, ip_addr, port,
