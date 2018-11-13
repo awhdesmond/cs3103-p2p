@@ -107,8 +107,8 @@ class Dhash(object):
             return True
         
         filename_hash = utils.generate_filename_hash(filename)
-        print(filename_hash)
-        self.peer.print_info()
+        # print(filename_hash)
+        # self.peer.print_info()
 
         return ((filename_hash > self.peer.predecessor['id'] and filename_hash <= self.peer.peer_id)
                 # 60 - F(70) - 2
