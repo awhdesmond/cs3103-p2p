@@ -117,7 +117,7 @@ class P2PResponsePacket(object):
                 ## OK HERE
                 code = int(status_tokens[0])
                 msg = status_tokens[1:-1]
-                data = list(map(lambda x: x.strip(), datalines))
+                data = list(map(lambda x: x, datalines))
                 return  P2PResponsePacket(code, msg, data)
             elif len(datalines) < num_data_bytes: 
                 ## still got more to receive
