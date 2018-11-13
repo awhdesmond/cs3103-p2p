@@ -18,12 +18,12 @@ CLIENT_ROOT_PATH = "./p2pvar/"
 
 class P2PMain(object):
 
-    def __init__(self, ip_addr):
+    def __init__(self, ip_addr, dns_ip_addr):
         # Create base directory to store files and chunks
         if not os.path.exists(CLIENT_ROOT_PATH):
             os.makedirs(CLIENT_ROOT_PATH)
 
-        self.p2p_server = P2PServer(ip_addr)
+        self.p2p_server = P2PServer(ip_addr, dns_ip_addr)
         self.p2p_client = P2PClient()
 
     def _setup(self):
@@ -40,5 +40,6 @@ class P2PMain(object):
         
 if __name__ == "__main__":
     ip_addr = sys.argv[1]
-    p2pmain = P2PMain(ip_addr)
+    dns_ip_addr = sys.argv[2]
+    p2pmain = P2PMain(ip_addr,dns_ip_addr)
     p2pmain.run()

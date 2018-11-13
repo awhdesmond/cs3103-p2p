@@ -42,9 +42,10 @@ STUN_MAPPED_ADDR_CODE = '0001'
 
 class P2PServer(object):
     
-    def __init__(self, ip_addr):
+    def __init__(self, ip_addr, dns_ip_addr):
         self.ip_addr       = ip_addr
         self.external_port = PEER_PORT
+        self.dns_ip_addr = dns_ip_addr
 
         external_ip, external_port = self._retrieve_public_ip_stun()
         # TODO: UNCOMMENT THIS WHEN NAT IS NOT SYMMETRIC
@@ -160,7 +161,7 @@ class P2PServer(object):
     def _retrieve_peer_ip_port(self):
         # TODO: handle case if DNS is not up.
         dns_client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        dns_client_sock.connect((DNS_IP_ADDR, DNS_PORT))
+        dns_client_sock.connect((self.dns_ip_addr, DNS_PORT))
         message = DnsRequestPacket(libp2pdns.JOIN_REQ_OP_WORD, [self.peer.peer_id, self.ip_addr, self.external_port])
         dns_client_sock.sendall(message.encode_bytes())
 
