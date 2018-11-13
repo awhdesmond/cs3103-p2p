@@ -45,19 +45,19 @@ class Chord(object):
                     self.peer.next_successor["ip_addr"] = data[7]
                     self.peer.next_successor["port"] = int(data[8])
 
-                    print("Informing my predecessor's predecessor to add me as its next successor")
+                    # print("Informing my predecessor's predecessor to add me as its next successor")
                     inform_packet = P2PRequestPacket(libp2pproto.INFORM_PREDECESSOR_PREDECESSOR_OP_WORD,
                                                      [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port])
                     send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], self.peer.predecessor["port"], inform_packet)
 
-                print("Informing my predecessor to add me as its successor and my successor as its next successor")
+                # print("Informing my predecessor to add me as its successor and my successor as its next successor")
                 inform_packet = P2PRequestPacket(libp2pproto.INFORM_PREDECESSOR_OP_WORD,
                                                  [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port,
                                                   self.peer.successor["id"], self.peer.successor["ip_addr"], self.peer.successor["port"]])
 
                 send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], self.peer.predecessor["port"], inform_packet)
 
-                print("Informing my successor to add me as its predecessor")
+                # print("Informing my successor to add me as its predecessor")
                 inform_packet = P2PRequestPacket(libp2pproto.INFORM_SUCCESSOR_OP_WORD, [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port])
                 send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor["port"], inform_packet)
 
@@ -79,9 +79,9 @@ class Chord(object):
         if not self.peer.successor["id"]:
             #Genesis node. No Stabilisation needed
             return
-        print("---------------STABLISATION---------------")
-        self.peer.print_info()
-        print()
+        # print("---------------STABLISATION---------------")
+        # self.peer.print_info()
+        # print()
 
         stab_packet = P2PRequestPacket(libp2pproto.QUERY_SUCCESSOR_FOR_NEIGHBOURS_OP_WORD, [])
         try:
@@ -130,7 +130,7 @@ class Chord(object):
         # Handle when node leaves the network
         except socket.error as e:
             if e.errno == 111:
-                print("Destination node has left the network...")
+                # print("Destination node has left the network...")
                 if self.peer.next_successor["id"]:
                     self.peer.successor["id"] = self.peer.next_successor["id"]
                     self.peer.successor["ip_addr"] = self.peer.next_successor["ip_addr"]
@@ -140,7 +140,7 @@ class Chord(object):
                     self.peer.next_successor["ip_addr"] = None
                     self.peer.next_successor["port"] = None
 
-                    print("Informing my predecessor to add me as its successor and my successor as its next successor")
+                    # print("Informing my predecessor to add me as its successor and my successor as its next successor")
                     inform_packet = P2PRequestPacket(libp2pproto.INFORM_PREDECESSOR_OP_WORD,
                                                      [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port,
                                                       self.peer.successor["id"], self.peer.successor["ip_addr"],
@@ -148,7 +148,7 @@ class Chord(object):
 
                     send_p2p_tcp_packet(self.peer.predecessor["ip_addr"], self.peer.predecessor["port"], inform_packet)
 
-                    print("Informing my successor to add me as its predecessor")
+                    # print("Informing my successor to add me as its predecessor")
                     inform_packet = P2PRequestPacket(libp2pproto.INFORM_SUCCESSOR_OP_WORD,
                                                      [self.peer.peer_id, self.peer.ip_addr, self.peer.external_port])
                     send_p2p_tcp_packet(self.peer.successor["ip_addr"], self.peer.successor["port"], inform_packet)
